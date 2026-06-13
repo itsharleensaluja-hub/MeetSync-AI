@@ -21,6 +21,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import VideoMeetComponent from './pages/VideoMeet';
 import HomeComponent from './pages/home';
 import History from './pages/history';
+import AttendanceHistory from './pages/AttendanceHistory';
 
 function App() {
   return (
@@ -43,6 +44,9 @@ function App() {
             
             {/* Meeting history page (requires login) */}
             <Route path='/history' element={<History />} />
+            
+            {/* Attendance history page (requires login) */}
+            <Route path='/attendance-history' element={<AttendanceHistory />} />
             
             {/* Video meeting room - :url is the meeting code */}
             <Route path='/:url' element={<VideoMeetComponent />} />

@@ -64,7 +64,7 @@ const register = async (req, res) => {
         // Check if username is already taken
         const existingUser = await User.findOne({ username });
         if (existingUser) {
-            return res.status(httpStatus.FOUND).json({ message: "User already exists" });
+            return res.status(httpStatus.CONFLICT).json({ message: "User already exists" });
         }
 
         // Hash password for security (never store plain text passwords)
@@ -83,7 +83,7 @@ const register = async (req, res) => {
         res.status(httpStatus.CREATED).json({ message: "User Registered" })
 
     } catch (e) {
-        res.json({ message: `Something went wrong ${e}` })
+        res.status(500).json({ message: `Something went wrong ${e}` })
     }
 
 }
@@ -92,16 +92,19 @@ const register = async (req, res) => {
 // GET USER HISTORY FUNCTION
 // Retrieves all past meetings that the user has joined
 const getUserHistory = async (req, res) => {
-    const { token } = req.query;
+    const token = req.headers.authorization || req.query.token;
 
     try {
         // Find user by their session token
         const user = await User.findOne({ token: token });
         // Get all meetings associated with this user
+        if (!user) {
+            return res.status(httpStatus.UNAUTHORIZED).json({ message: "Invalid token" });
+        }
         const meetings = await Meeting.find({ user_id: user.username })
         res.json(meetings)
     } catch (e) {
-        res.json({ message: `Something went wrong ${e}` })
+        res.status(500).json({ message: `Something went wrong ${e}` })
     }
 }
 
@@ -113,6 +116,9 @@ const addToHistory = async (req, res) => {
     try {
         // Find user by token
         const user = await User.findOne({ token: token });
+        if (!user) {
+            return res.status(httpStatus.UNAUTHORIZED).json({ message: "Invalid token" });
+        }
 
         // Create new meeting record
         const newMeeting = new Meeting({
@@ -125,7 +131,7 @@ const addToHistory = async (req, res) => {
 
         res.status(httpStatus.CREATED).json({ message: "Added code to history" })
     } catch (e) {
-        res.json({ message: `Something went wrong ${e}` })
+        res.status(500).json({ message: `Something went wrong ${e}` })
     }
 }
 

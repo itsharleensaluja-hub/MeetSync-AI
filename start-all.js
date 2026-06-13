@@ -31,7 +31,7 @@ async function start() {
 
   console.log('[2/4] Starting Backend Server...');
   const backend = spawn('npm', ['run', 'dev'], {
-    cwd: './Zoom/backend',
+    cwd: './MeetTrack-AI/backend',
     shell: true,
     stdio: 'inherit'
   });
@@ -46,7 +46,7 @@ async function start() {
 
   console.log('[3/4] Starting Frontend Server...');
   const frontend = spawn('npm', ['start'], {
-    cwd: './Zoom/frontend',
+    cwd: './MeetTrack-AI/frontend',
     shell: true,
     stdio: 'inherit',
     env: { ...process.env, BROWSER: 'none' }

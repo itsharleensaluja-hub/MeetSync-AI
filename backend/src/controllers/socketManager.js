@@ -33,7 +33,13 @@ export const connectToSocket = (server) => {
     // Initialize Socket.io server with CORS configuration
     const io = new Server(server, {
         cors: {
-            origin: "*", // Allow connections from any origin
+            origin: [
+                'http://localhost:3000',
+                'http://127.0.0.1:3000',
+                'https://meettrack-ai.onrender.com',
+                'https://meettrack-ai-1.onrender.com',
+                process.env.FRONTEND_URL
+            ].filter(Boolean),
             methods: ["GET", "POST"],
             allowedHeaders: ["*"],
             credentials: true
@@ -56,11 +62,15 @@ export const connectToSocket = (server) => {
                 meetingStartTimes[path] = new Date();
             }
 
-            // Set meeting owner - FIRST person to join becomes owner
-            if (connections[path].length === 0 && !meetingOwners[path]) {
+            // Set meeting owner - use isOwner flag from client, fall back to first-join
+            if (isOwner && !meetingOwners[path]) {
                 meetingOwners[path] = userId;
                 io.to(socket.id).emit('you-are-owner');
                 console.log(`👑 Meeting owner set: ${userName} (${userId}) for meeting: ${path}`);
+            } else if (connections[path].length === 0 && !meetingOwners[path]) {
+                meetingOwners[path] = userId;
+                io.to(socket.id).emit('you-are-owner');
+                console.log(`👑 Meeting owner (first-join fallback): ${userName} (${userId}) for meeting: ${path}`);
             }
 
             // Join the socket to a room with the meeting code

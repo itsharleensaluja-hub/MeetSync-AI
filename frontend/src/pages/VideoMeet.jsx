@@ -757,7 +757,7 @@ const enrollFace = async () => {
     socketRef.current.on('connect', () => {
       console.log('🔌 Socket connected! Socket ID:', socketRef.current.id);
       console.log('🚪 Joining meeting room:', meetingCode);
-      socketRef.current.emit('join-call', meetingCode, uniqueUserId, username || 'Anonymous', false);
+      socketRef.current.emit('join-call', meetingCode, uniqueUserId, username || 'Anonymous', true);
       socketIdRef.current = socketRef.current.id;
 
       // Listen for owner assignment from server
@@ -1252,7 +1252,7 @@ const handleVideo = () => {
 
           <div className={styles.conferenceView}>
             {videos.map((v, index) => {
-              console.log(`� Rendering remote video ${index} for socket: ${v.socketId}`, v.stream ? 'has stream' : 'NO STREAM!');
+              console.log(`Rendering remote video ${index} for socket: ${v.socketId}`, v.stream ? 'has stream' : 'NO STREAM!');
               if (v.stream) {
                 console.log(`  🎤 Stream ${v.socketId} audio tracks:`, v.stream.getAudioTracks().length);
                 v.stream.getAudioTracks().forEach(track => {
