@@ -127,6 +127,13 @@ export default function VideoMeetComponent() {
   const [reactions, setReactions] = useState([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
+  // Ensure local video element gets srcObject whenever video is on
+  useEffect(() => {
+    if (video && localVideoref.current && window.localStream) {
+      localVideoref.current.srcObject = window.localStream;
+    }
+  }, [video]);
+
   const EMOJIS = ['😂', '👍', '❤️', '😮', '😢', '🎉', '🔥', '👏'];
   
   // Generate unique user ID for this session
@@ -1050,19 +1057,74 @@ const enrollFace = async () => {
     return -1;
   };
 
-//debug
-const handleVideo = () => {
-  setVideo(prev => {
-    const newState = !prev;
-
+const handleVideo = async () => {
+  if (video) {
+    // TURNING OFF: disable tracks locally + on all peers
     if (window.localStream) {
       window.localStream.getVideoTracks().forEach(track => {
-        track.enabled = newState;
+        track.enabled = false;
       });
     }
+    for (let id in connections) {
+      if (id === socketIdRef.current) continue;
+      const senders = connections[id].getSenders();
+      const videoSender = senders.find(s => s.track?.kind === 'video');
+      if (videoSender && videoSender.track) {
+        videoSender.track.enabled = false;
+      }
+    }
+    setVideo(false);
+  } else {
+    // TURNING ON: get fresh camera track, replace on all peers
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 } }
+      });
+      const newTrack = stream.getVideoTracks()[0];
+      if (!newTrack) { setVideo(false); return; }
 
-    return newState;
-  });
+      // Replace video track in local stream
+      const local = window.localStream;
+      if (local) {
+        local.getVideoTracks().forEach(t => { local.removeTrack(t); t.stop(); });
+        local.addTrack(newTrack);
+      } else {
+        window.localStream = stream;
+      }
+
+      // Replace video sender track on all peer connections
+      for (let id in connections) {
+        if (id === socketIdRef.current) continue;
+        const senders = connections[id].getSenders();
+        const videoSender = senders.find(s => s.track?.kind === 'video');
+        if (videoSender) {
+          try { await videoSender.replaceTrack(newTrack); } catch (e) { console.error(e); }
+        } else {
+          connections[id].addTrack(newTrack, window.localStream || stream);
+        }
+      }
+
+      // Force keyframe via renegotiation on all peers
+      for (let id in connections) {
+        if (id === socketIdRef.current) continue;
+        const pc = connections[id];
+        if (pc.signalingState !== 'stable') continue;
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socketRef.current.emit('signal', id, JSON.stringify({ sdp: pc.localDescription }));
+        } catch (e) {
+          console.error('Renegotiation error for', id, e);
+        }
+      }
+
+      if (localVideoref.current) localVideoref.current.srcObject = window.localStream;
+      setVideo(true);
+    } catch (err) {
+      console.error('Failed to re-acquire camera:', err);
+      setVideo(false);
+    }
+  }
 };
 
 
@@ -1323,9 +1385,9 @@ const handleVideo = () => {
             <section className={styles.videoGrid}>
               {/* Local video */}
               <div className={`${styles.videoTile} ${isMeetingOwner ? styles.speakerGlow : ''}`}>
-                {(video && videoAvailable && window.localStream) ? (
-                  <video ref={localVideoref} autoPlay muted playsInline className={styles.videoElement} />
-                ) : (
+                <video ref={localVideoref} autoPlay muted playsInline className={styles.videoElement}
+                  style={{ display: (video && videoAvailable && window.localStream) ? 'block' : 'none' }} />
+                {(!video || !videoAvailable || !window.localStream) && (
                   <div className={styles.avatarPlaceholder}>
                     <span>{(username || 'You')[0].toUpperCase()}</span>
                   </div>
