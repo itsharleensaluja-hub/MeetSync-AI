@@ -1201,33 +1201,66 @@ const handleVideo = () => {
   return (
     <div>
       {askForUsername ? (
-        <div style={{ textAlign: 'center', padding: '50px' }}>
-          <h2>Enter into Lobby</h2>
-          <TextField
-            label="Username"
-            value={username}
-            onChange={e => setUsername(e.target.value)}
-            variant="outlined"
-            sx={{ width: '300px', mb: 2 }}
-          />
-          <br />
-          <Button variant="contained" onClick={connect}>
-            Connect
-          </Button>
-          <div style={{ marginTop: '20px' }}>
-            <video
-              ref={lobbyVideoRef}
-              autoPlay
-              muted
-              playsInline
-              style={{
-                width: '640px',
-                height: '480px',
-                background: 'black',
-                borderRadius: '10px',
-              }}
-            />
-          </div>
+        <div className={styles.lobbyWrapper}>
+          {/* TOP NAV */}
+          <header className={styles.topNav}>
+            <div className={styles.topNavLeft}>
+              <div className={styles.logoIcon}>
+                <PsychologyIcon />
+              </div>
+              <h1 className={styles.navTitle}>MeetSync AI</h1>
+              <div className={styles.navDivider}></div>
+              <span className={styles.navSubtitle}>Live Room</span>
+            </div>
+            <div className={styles.topNavRight}>
+              <span style={{ fontSize: 12, color: '#8a8fa8' }}>Ready to join</span>
+            </div>
+          </header>
+
+          <main className={styles.lobbyBody}>
+            {/* LEFT: Join Card */}
+            <div className={styles.lobbyCard}>
+              <div className={styles.lobbyBrandBadge}>
+                <PsychologyIcon />
+              </div>
+              <h2 className={styles.lobbyCardTitle}>Join Your Meeting</h2>
+              <p className={styles.lobbyCardSub}>Enter your name to join the room</p>
+
+              <div className={styles.lobbyCodeRow}>
+                <span className={styles.lobbyCodeLabel}>Room</span>
+                <span className={styles.lobbyCodeValue}>{meetingCode}</span>
+              </div>
+
+              <input
+                className={styles.lobbyInput}
+                placeholder="Your display name"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                onKeyPress={e => e.key === 'Enter' && username.trim() && connect()}
+              />
+
+              <button className={styles.lobbyBtn} onClick={connect} disabled={!username.trim()}>
+                <span>Enter Meeting Room</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+              </button>
+            </div>
+
+            {/* RIGHT: Video Preview */}
+            <div className={styles.lobbyPreview}>
+              <video
+                ref={lobbyVideoRef}
+                autoPlay
+                muted
+                playsInline
+              />
+              <div className={styles.lobbyPreviewLabel}>
+                <span className={styles.lobbyPreviewDot}></span>
+                Camera Preview
+              </div>
+            </div>
+          </main>
         </div>
       ) : (
         <div className={styles.meetVideoContainer}>
