@@ -132,13 +132,13 @@ export default function Authentication() {
                         MeetSync AI
                     </h1>
                     <p style={{ fontSize: 16, color: '#8a8fa8', marginTop: 8, lineHeight: 1.6, maxWidth: 360, margin: '12px auto 0' }}>
-                        Video meetings with AI-powered attendance, real-time polling, and smart collaboration.
+                        Smart meetings with AI-powered attendance, real-time polling, and team collaboration.
                     </p>
                     <Box sx={{ mt: 5, display: 'flex', flexDirection: 'column', gap: 2.5, alignItems: 'flex-start', maxWidth: 280, mx: 'auto' }}>
                         {[
                             { icon: '✓', text: 'AI Face Attendance Tracking' },
                             { icon: '✓', text: 'Live Polls & Decision Tracking' },
-                            { icon: '✓', text: 'Secure Real-time Video Calls' },
+                            { icon: '✓', text: 'Secure Real-time Meetings' },
                         ].map((item, i) => (
                             <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                                 <Box sx={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(100,94,251,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#645efb', fontSize: 12, fontWeight: 700 }}>{item.icon}</Box>

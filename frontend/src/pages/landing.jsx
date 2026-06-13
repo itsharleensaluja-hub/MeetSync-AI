@@ -22,7 +22,7 @@ export default function LandingPage() {
             {/* Navigation Bar */}
             <nav>
                 <div className='navHeader'>
-                    <h2> Video Call</h2>
+                    <h2>MeetSync AI</h2>
                 </div>
                 <div className='navlist'>
                     {/* Join as guest - goes to test meeting room */}
@@ -47,9 +47,9 @@ export default function LandingPage() {
             {/* Hero Section */}
             <div className="landingMainContainer">
                 <div>
-                    <h1><span style={{ color: "#FF9839" }}>Connect</span> with your loved Ones</h1>
+                    <h1><span style={{ color: "#FF9839" }}>Smart Meetings</span> for Modern Teams</h1>
 
-                    <p>Cover a distance by Video Call</p>
+                    <p>AI-powered attendance, real-time polling, and secure collaboration</p>
                     <div role='button'>
                         <Link to={"/auth"}>Get Started</Link>
                     </div>

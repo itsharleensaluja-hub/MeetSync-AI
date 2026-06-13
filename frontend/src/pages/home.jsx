@@ -41,7 +41,7 @@ function HomeComponent() {
             <div className="navBar">
 
                 <div style={{ display: "flex", alignItems: "center" }}>
-                    <h2>Video Call</h2>
+                    <h2>MeetSync AI</h2>
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center" }}>
@@ -71,7 +71,7 @@ function HomeComponent() {
                 {/* Left panel with meeting code input */}
                 <div className="leftPanel">
                     <div>
-                        <h2>Providing Quality Video Call Just Like Quality Education</h2>
+                        <h2>Start or join a meeting in seconds</h2>
 
                         <div style={{ display: 'flex', gap: "10px" }}>
                             {/* Input field for meeting code */}
