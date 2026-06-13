@@ -116,6 +116,13 @@ export default function VideoMeetComponent() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('chat');
   
+  // Polls & Decisions state
+  const [polls, setPolls] = useState([]);
+  const [decisions, setDecisions] = useState([]);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState(['', '']);
+  const [decisionText, setDecisionText] = useState('');
+  
   // Generate unique user ID for this session
   const [uniqueUserId] = useState(() => {
     const stored = sessionStorage.getItem('uniqueUserId');
@@ -801,6 +808,16 @@ const enrollFace = async () => {
         setOwnerReportReceived(true);
       });
 
+      socketRef.current.on('poll-created', (poll) => {
+        setPolls(prev => [...prev, poll]);
+      });
+      socketRef.current.on('poll-updated', (updatedPoll) => {
+        setPolls(prev => prev.map(p => p.id === updatedPoll.id ? updatedPoll : p));
+      });
+      socketRef.current.on('decision-added', (decision) => {
+        setDecisions(prev => [...prev, decision]);
+      });
+
       socketRef.current.on('chat-message', addMessage);
       socketRef.current.on('user-left', id => {
         console.log('👋 User left:', id);
@@ -964,6 +981,62 @@ const enrollFace = async () => {
       socketRef.current.emit('chat-message', message, username);
       setMessage('');
     }
+  };
+
+  const createPoll = () => {
+    const validOptions = pollOptions.filter(o => o.trim());
+    if (!pollQuestion.trim() || validOptions.length < 2) {
+      alert('Please enter a question and at least 2 options');
+      return;
+    }
+    socketRef.current.emit('create-poll', {
+      meetingId: meetingCode,
+      question: pollQuestion,
+      options: validOptions
+    });
+    setPollQuestion('');
+    setPollOptions(['', '']);
+  };
+
+  const votePoll = (pollId, optionIndex) => {
+    socketRef.current.emit('vote-poll', {
+      meetingId: meetingCode,
+      pollId,
+      optionIndex
+    });
+  };
+
+  const addDecision = () => {
+    if (!decisionText.trim()) return;
+    socketRef.current.emit('add-decision', {
+      meetingId: meetingCode,
+      text: decisionText,
+      proposedBy: username
+    });
+    setDecisionText('');
+  };
+
+  const addPollOption = () => {
+    setPollOptions(prev => [...prev, '']);
+  };
+
+  const removePollOption = (index) => {
+    setPollOptions(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updatePollOption = (index, value) => {
+    setPollOptions(prev => prev.map((opt, i) => i === index ? value : opt));
+  };
+
+  const hasVoted = (poll, userId) => {
+    return poll.options.some(opt => opt.votes.includes(userId));
+  };
+
+  const getUserVoteIndex = (poll, userId) => {
+    for (let i = 0; i < poll.options.length; i++) {
+      if (poll.options[i].votes.includes(userId)) return i;
+    }
+    return -1;
   };
 
 //debug
@@ -1256,6 +1329,9 @@ const handleVideo = () => {
                 <button onClick={() => handleTabChange('attendance')} className={`${styles.tabButton} ${activeTab === 'attendance' ? styles.tabActive : ''}`}>
                   Attendance
                 </button>
+                <button onClick={() => handleTabChange('polls')} className={`${styles.tabButton} ${activeTab === 'polls' ? styles.tabActive : ''}`}>
+                  Polls
+                </button>
                 <button onClick={() => handleTabChange('info')} className={`${styles.tabButton} ${activeTab === 'info' ? styles.tabActive : ''}`}>
                   Info
                 </button>
@@ -1339,6 +1415,108 @@ const handleVideo = () => {
                       <div style={{ textAlign: 'center', padding: '40px 20px' }}>
                         <p style={{ fontSize: 14, color: '#45464d' }}>Attendance tracking is managed by the meeting owner.</p>
                       </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 4: POLLS */}
+                {activeTab === 'polls' && (
+                  <div className={styles.pollsTab}>
+                    {/* SECTION: Create Poll */}
+                    <div className={styles.pollCreateForm}>
+                      <p className={styles.subSectionTitle}>Create Poll</p>
+                      <input
+                        placeholder="Ask a question..."
+                        value={pollQuestion}
+                        onChange={e => setPollQuestion(e.target.value)}
+                      />
+                      {pollOptions.map((opt, idx) => (
+                        <div key={idx} className={styles.pollOptionRow}>
+                          <input
+                            placeholder={`Option ${idx + 1}`}
+                            value={opt}
+                            onChange={e => updatePollOption(idx, e.target.value)}
+                          />
+                          {pollOptions.length > 2 && (
+                            <button className={styles.pollRemoveOption} onClick={() => removePollOption(idx)}>×</button>
+                          )}
+                        </div>
+                      ))}
+                      <button className={styles.pollAddOption} onClick={addPollOption}>+ Add Option</button>
+                      <button className={styles.pollCreateBtn} onClick={createPoll}>Launch Poll</button>
+                    </div>
+
+                    <div className={styles.subSectionDivider} />
+
+                    {/* SECTION: Active Polls */}
+                    <p className={styles.subSectionTitle}>Active Polls</p>
+                    {polls.length === 0 ? (
+                      <p className={styles.emptyStateSmall}>No polls yet. Create one above!</p>
+                    ) : (
+                      polls.map(poll => {
+                        const totalVotes = poll.options.reduce((sum, opt) => sum + opt.votes.length, 0);
+                        const votedIdx = getUserVoteIndex(poll, socketIdRef.current);
+                        return (
+                          <div key={poll.id} className={styles.pollCard}>
+                            <p className={styles.pollQuestion}>{poll.question}</p>
+                            {votedIdx >= 0 ? (
+                              /* RESULTS VIEW */
+                              poll.options.map((opt, idx) => {
+                                const pct = totalVotes > 0 ? Math.round((opt.votes.length / totalVotes) * 100) : 0;
+                                return (
+                                  <div key={idx} className={styles.pollResultRow}>
+                                    <span className={styles.pollResultText}>{opt.text}</span>
+                                    <div className={styles.pollResultBar}>
+                                      <div className={styles.pollResultBarFill} style={{ width: `${pct}%` }} />
+                                    </div>
+                                    <span className={styles.pollResultPercent}>{pct}%</span>
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              /* VOTE VIEW */
+                              poll.options.map((opt, idx) => (
+                                <div key={idx} className={styles.pollOption} onClick={() => votePoll(poll.id, idx)}>
+                                  <div className={styles.pollOptionDot}>
+                                    <div className={styles.pollOptionDotInner} />
+                                  </div>
+                                  <span className={styles.pollOptionText}>{opt.text}</span>
+                                </div>
+                              ))
+                            )}
+                            <p className={styles.pollVoteCount}>{totalVotes} vote{totalVotes !== 1 ? 's' : ''}</p>
+                          </div>
+                        );
+                      })
+                    )}
+
+                    <div className={styles.subSectionDivider} />
+
+                    {/* SECTION: Decisions */}
+                    <p className={styles.subSectionTitle}>Decisions</p>
+                    <div className={styles.decisionInput}>
+                      <input
+                        placeholder="Record a decision..."
+                        value={decisionText}
+                        onChange={e => setDecisionText(e.target.value)}
+                        onKeyPress={e => e.key === 'Enter' && addDecision()}
+                      />
+                      <button className={styles.decisionAddBtn} onClick={addDecision}>Add</button>
+                    </div>
+                    {decisions.length === 0 ? (
+                      <p className={styles.emptyStateSmall}>No decisions recorded yet.</p>
+                    ) : (
+                      decisions.map(dec => (
+                        <div key={dec.id} className={styles.decisionItem}>
+                          <div className={styles.decisionIcon}>✓</div>
+                          <div className={styles.decisionContent}>
+                            <p className={styles.decisionText}>{dec.text}</p>
+                            <p className={styles.decisionMeta}>
+                              {dec.proposedBy} · {new Date(dec.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                        </div>
+                      ))
                     )}
                   </div>
                 )}

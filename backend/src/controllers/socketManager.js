@@ -29,6 +29,11 @@ let meetingOwners = {}; // Tracks who created each meeting
 // meetingStartTimes: { 'meeting-code': Date }
 let meetingStartTimes = {}; // Tracks when each meeting started
 
+// polls: { 'meeting-code': [{ id, question, options: [{text, votes:[]}], creator, active }] }
+let polls = {};
+// decisions: { 'meeting-code': [{ id, text, proposedBy, timestamp }] }
+let decisions = {};
+
 export const connectToSocket = (server) => {
     // Initialize Socket.io server with CORS configuration
     const io = new Server(server, {
@@ -212,8 +217,13 @@ export const connectToSocket = (server) => {
                 meetingOwner: owner || 'unknown',
                 startTime: startTime || new Date(),
                 endTime: new Date(),
-                participants: [] 
+                participants: [],
+                decisions: decisions[meetingId] || []
             };
+
+            // Clean up polls and decisions after generating report
+            delete polls[meetingId];
+            delete decisions[meetingId];
 
             room.forEach(user => {
                 const percent = user.totalTime > 0 ? Math.round((user.verifiedTime / user.totalTime) * 100) : 0;
@@ -271,6 +281,56 @@ export const connectToSocket = (server) => {
             } catch (err) {
                 console.error("❌ Error saving attendance:", err);
             }
+        });
+
+        // ==================== POLL EVENTS ====================
+
+        // Create a new poll
+        socket.on("create-poll", ({ meetingId, question, options }) => {
+            if (!polls[meetingId]) polls[meetingId] = [];
+            const poll = {
+                id: Date.now().toString(),
+                question,
+                options: options.map(text => ({ text, votes: [] })),
+                creator: socket.id,
+                active: true
+            };
+            polls[meetingId].push(poll);
+            io.to(meetingId).emit("poll-created", poll);
+            console.log(`📊 Poll created in ${meetingId}: "${question}"`);
+        });
+
+        // Vote on a poll
+        socket.on("vote-poll", ({ meetingId, pollId, optionIndex }) => {
+            const meetingPolls = polls[meetingId];
+            if (!meetingPolls) return;
+            const poll = meetingPolls.find(p => p.id === pollId);
+            if (!poll) return;
+
+            // Remove previous vote from this user in any option
+            poll.options.forEach(opt => {
+                opt.votes = opt.votes.filter(v => v !== socket.id);
+            });
+
+            // Add new vote
+            poll.options[optionIndex].votes.push(socket.id);
+
+            io.to(meetingId).emit("poll-updated", poll);
+            console.log(`🗳️ Vote cast in ${meetingId} on poll "${poll.question}"`);
+        });
+
+        // Add a decision
+        socket.on("add-decision", ({ meetingId, text, proposedBy }) => {
+            if (!decisions[meetingId]) decisions[meetingId] = [];
+            const decision = {
+                id: Date.now().toString(),
+                text,
+                proposedBy,
+                timestamp: new Date().toISOString()
+            };
+            decisions[meetingId].push(decision);
+            io.to(meetingId).emit("decision-added", decision);
+            console.log(`📝 Decision recorded in ${meetingId}: "${text}" by ${proposedBy}`);
         });
 
         // ==================== END NEW EVENTS ====================
