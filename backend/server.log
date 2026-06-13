@@ -1,0 +1,34 @@
+
+> backend@1.0.0 dev
+> nodemon src/app.js
+
+[33m[nodemon] 3.0.2[39m
+[33m[nodemon] to restart at any time, enter `rs`[39m
+[33m[nodemon] watching path(s): *.*[39m
+[33m[nodemon] watching extensions: js,mjs,cjs,json[39m
+[32m[nodemon] starting `node src/app.js`[39m
+[dotenv@17.2.3] injecting env (2) from .env -- tip: 📡 add observability to secrets: https://dotenvx.com/ops
+✅ CORS Allowed Origins: [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'https://meettrack-ai.onrender.com',
+  'https://meettrack-ai-1.onrender.com'
+]
+✅ Mongo Connected: ac-lo5chtd-shard-00-00.ojyyct8.mongodb.net
+✅ Server listening on port 8000
+✅ API Health Check: http://localhost:8000/api/health
+✅ Login endpoint: http://localhost:8000/api/v1/users/login
+✅ Allowing request with no origin (Postman/mobile)
+✅ Allowing request with no origin (Postman/mobile)
+✅ Allowing request with no origin (Postman/mobile)
+✅ Allowing request with no origin (Postman/mobile)
+✅ Allowing request with no origin (Postman/mobile)
+✅ Allowing request with no origin (Postman/mobile)
+✅ Allowing request with no origin (Postman/mobile)
+✅ Allowing request with no origin (Postman/mobile)
+✅ Allowing request with no origin (Postman/mobile)
+✅ Allowing request with no origin (Postman/mobile)
+✅ Allowing request with no origin (Postman/mobile)
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+
+C:\Users\itsha\Desktop\MeetSync AI\MeetTrack-AI\backend>

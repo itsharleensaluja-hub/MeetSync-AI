@@ -31,6 +31,12 @@ import MicOffIcon from '@mui/icons-material/MicOff';
 import ScreenShareIcon from '@mui/icons-material/ScreenShare';
 import StopScreenShareIcon from '@mui/icons-material/StopScreenShare';
 import ChatIcon from '@mui/icons-material/Chat';
+import PsychologyIcon from '@mui/icons-material/Psychology';
+import AnalyticsIcon from '@mui/icons-material/Analytics';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import SearchIcon from '@mui/icons-material/Search';
+import SentimentSatisfiedIcon from '@mui/icons-material/SentimentSatisfied';
+import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
 import server from '../environment';
 
 const server_url = server;
@@ -89,7 +95,6 @@ export default function VideoMeetComponent() {
   const [video, setVideo] = useState(true);
   const [audio, setAudio] = useState(true);
   const [screen, setScreen] = useState(false);
-  const [showModal, setModal] = useState(false);
   const [screenAvailable, setScreenAvailable] = useState(false);
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState('');
@@ -107,8 +112,9 @@ export default function VideoMeetComponent() {
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [isMeetingOwner, setIsMeetingOwner] = useState(false);
   const [ownerReportReceived, setOwnerReportReceived] = useState(false);
-  const [showDashboard, setShowDashboard] = useState(false);
   const [liveAttendance, setLiveAttendance] = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeTab, setActiveTab] = useState('chat');
   
   // Generate unique user ID for this session
   const [uniqueUserId] = useState(() => {
@@ -1092,6 +1098,33 @@ const handleVideo = () => {
     getMedia();
   };
 
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    if (tab === 'chat') setNewMessages(0);
+  };
+
+  const toggleSidebar = () => {
+    setSidebarOpen(prev => !prev);
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Present': return '#4CAF50';
+      case 'Partial': return '#FF9800';
+      case 'Absent': return '#F44336';
+      default: return '#45464d';
+    }
+  };
+
+  const getStatusEmoji = (status) => {
+    switch (status) {
+      case 'Present': return '✅';
+      case 'Partial': return '⚠️';
+      case 'Absent': return '❌';
+      default: return '❓';
+    }
+  };
+
   return (
     <div>
       {askForUsername ? (
@@ -1125,162 +1158,66 @@ const handleVideo = () => {
         </div>
       ) : (
         <div className={styles.meetVideoContainer}>
-          {isMeetingOwner && (
-            <div style={{
-              position: 'absolute',
-              top: '10px',
-              left: '10px',
-              background: 'linear-gradient(135deg, #FFD700, #FFA500)',
-              color: 'white',
-              padding: '10px 20px',
-              borderRadius: '25px',
-              fontWeight: 'bold',
-              fontSize: '14px',
-              boxShadow: '0 4px 15px rgba(255, 215, 0, 0.4)',
-              zIndex: 1000,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}>
-              <span style={{ fontSize: '20px' }}>👑</span>
-              <span>Meeting Owner - You'll receive attendance report</span>
-            </div>
-          )}
-          {showModal && (
-            <div className={styles.chatRoom}>
-              <div className={styles.chatContainer}>
-                <h1>Chat</h1>
-                <div className={styles.chattingDisplay}>
-                  {messages.length > 0 ? (
-                    messages.map((m, i) => (
-                      <div key={i} style={{ marginBottom: '15px' }}>
-                        <strong>{m.sender}:</strong> {m.data}
-                      </div>
-                    ))
-                  ) : (
-                    <p>No messages yet</p>
-                  )}
-                </div>
-                <div className={styles.chattingArea}>
-                  <TextField
-                    fullWidth
-                    value={message}
-                    onChange={e => setMessage(e.target.value)}
-                    onKeyPress={e => e.key === 'Enter' && sendMessage()}
-                    label="Type a message"
-                    variant="outlined"
-                  />
-                  <Button
-                    variant="contained"
-                    onClick={sendMessage}
-                    sx={{ ml: 1 }}
-                  >
-                    Send
-                  </Button>
-                </div>
+          {/* TOP NAV */}
+          <header className={styles.topNav}>
+            <div className={styles.topNavLeft}>
+              <div className={styles.logoIcon}>
+                <PsychologyIcon />
               </div>
+              <h1 className={styles.navTitle}>MeetSync AI</h1>
+              <div className={styles.navDivider}></div>
+              <span className={styles.navSubtitle}>Live Room</span>
             </div>
-          )}
+            <div className={styles.topNavRight}>
+              <div className={styles.avatarStack}>
+                {videos.slice(0, 2).map(v => (
+                  <div key={v.socketId} className={styles.avatarImg} style={{ background: '#645efb', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '12px', fontWeight: 700 }}>
+                    {(v.userName || 'U')[0].toUpperCase()}
+                  </div>
+                ))}
+                {videos.length > 2 && (
+                  <div className={styles.avatarCount}>+{videos.length - 2}</div>
+                )}
+              </div>
+              {isMeetingOwner && (
+                <div className={styles.recordingBadge}>
+                  <RecordVoiceOverIcon />
+                  Recording
+                </div>
+              )}
+            </div>
+          </header>
 
-          <div className={styles.buttonContainers}>
-            <IconButton onClick={handleVideo} style={{ color: 'white' }} title="Toggle Video">
-              {video ? <VideocamIcon /> : <VideocamOffIcon />}
-            </IconButton>
-            <IconButton 
-              onClick={handleEndCall} 
-              style={{ 
-                color: 'white',
-                background: '#dc3545',
-                padding: '12px'
-              }}
-              title={isMeetingOwner ? "End Meeting & Generate Attendance Report" : "Leave Meeting"}
-            >
-              <CallEndIcon />
-            </IconButton>
-            <IconButton 
-              onClick={handleAudio} 
-              style={{ 
-                color: audio ? 'white' : '#ff4444',
-                background: audio ? 'transparent' : 'rgba(255, 68, 68, 0.2)',
-                border: audio ? 'none' : '2px solid #ff4444'
-              }}
-              title={audio ? "Mute Microphone" : "Unmute Microphone"}
-            >
-              {audio ? <MicIcon /> : <MicOffIcon />}
-            </IconButton>
-            {screenAvailable && (
-              <IconButton
-                onClick={handleScreen}
-                style={{ color: 'white' }}
-              >
-                {screen ? <ScreenShareIcon /> : <StopScreenShareIcon />}
-              </IconButton>
-            )}
-            {isMeetingOwner && (
-              <IconButton
-                onClick={() => setShowDashboard(!showDashboard)}
-                style={{ 
-                  color: showDashboard ? '#FFD700' : 'white',
-                  background: showDashboard ? 'rgba(255, 215, 0, 0.3)' : liveAttendance.length > 0 ? 'rgba(76, 175, 80, 0.2)' : 'transparent',
-                  border: liveAttendance.length > 0 ? '2px solid rgba(76, 175, 80, 0.5)' : 'none',
-                  animation: liveAttendance.length > 0 && !showDashboard ? 'pulse 2s infinite' : 'none'
-                }}
-                title={`Attendance Dashboard (${liveAttendance.length} participants tracked)`}
-              >
-                <Badge badgeContent={liveAttendance.length} color="success">
-                  <span style={{ fontSize: '24px' }}>📊</span>
-                </Badge>
-              </IconButton>
-            )}
-            <Badge badgeContent={newMessages} color="error">
-              <IconButton
-                onClick={() => setModal(!showModal)}
-                style={{ color: 'white' }}
-              >
-                <ChatIcon />
-              </IconButton>
-            </Badge>
-          </div>
+          <main className={styles.mainContent}>
+            {/* VIDEO GRID */}
+            <section className={styles.videoGrid}>
+              {/* Local video */}
+              <div className={`${styles.videoTile} ${isMeetingOwner ? styles.speakerGlow : ''}`}>
+                {(video && videoAvailable && window.localStream) ? (
+                  <video ref={localVideoref} autoPlay muted playsInline className={styles.videoElement} />
+                ) : (
+                  <div className={styles.avatarPlaceholder}>
+                    <span>{(username || 'You')[0].toUpperCase()}</span>
+                  </div>
+                )}
+                <div className={styles.videoLabel}>
+                  {audio ? <MicIcon className={styles.micOff} /> : <MicOffIcon className={styles.micOff} />}
+                  <span>You</span>
+                </div>
+                {isMeetingOwner && <div className={styles.ownerBadge}><span>👑</span> Owner</div>}
+              </div>
 
-          <video
-            className={styles.meetUserVideo}
-            ref={localVideoref}
-            autoPlay
-            muted
-            playsInline
-          ></video>
-
-          <div className={styles.conferenceView}>
-            {videos.map((v, index) => {
-              console.log(`Rendering remote video ${index} for socket: ${v.socketId}`, v.stream ? 'has stream' : 'NO STREAM!');
-              if (v.stream) {
-                console.log(`  🎤 Stream ${v.socketId} audio tracks:`, v.stream.getAudioTracks().length);
-                v.stream.getAudioTracks().forEach(track => {
-                  console.log(`    ♪ Audio: ${track.label} - Enabled: ${track.enabled} - Muted: ${track.muted} - ReadyState: ${track.readyState}`);
-                });
-              }
-              return (
-                <div key={`${v.socketId}-${index}`}>
+              {/* Remote videos */}
+              {videos.map((v, index) => (
+                <div key={v.socketId} className={styles.videoTile}>
                   <video
                     ref={ref => {
                       if (ref && v.stream) {
                         ref.srcObject = v.stream;
-                        // CRITICAL: Ensure audio playback is enabled
                         ref.muted = false;
                         ref.volume = 1.0;
                         ref.setAttribute('playsinline', '');
                         ref.setAttribute('autoplay', '');
-                        
-                        console.log(`🔊 Video element ${v.socketId} stream updated:`, {
-                          muted: ref.muted,
-                          volume: ref.volume,
-                          audioTracks: v.stream.getAudioTracks().length,
-                          videoTracks: v.stream.getVideoTracks().length,
-                          audioEnabled: v.stream.getAudioTracks()[0]?.enabled,
-                          videoEnabled: v.stream.getVideoTracks()[0]?.enabled
-                        });
-                        
-                        // Always try to play (autoplay may fail on first load)
                         setTimeout(() => {
                           if (ref.paused) {
                             ref.play().catch(e => {
@@ -1296,139 +1233,197 @@ const handleVideo = () => {
                     }}
                     autoPlay
                     playsInline
+                    className={styles.videoElement}
                   />
+                  <div className={styles.videoLabel}>
+                    <MicIcon />
+                    <span>{v.userName || `User ${index + 1}`}</span>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
+              ))}
 
-          {/* Attendance Dashboard */}
-          {isMeetingOwner && showDashboard && (
-            <div style={{
-              position: 'absolute',
-              top: '70px',
-              right: '20px',
-              width: '350px',
-              maxHeight: '70vh',
-              background: 'rgba(255, 255, 255, 0.95)',
-              backdropFilter: 'blur(10px)',
-              borderRadius: '15px',
-              padding: '20px',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-              zIndex: 1000,
-              overflowY: 'auto'
-            }}>
-              <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}> 
-                <span>📊</span>
-                <span style={{ fontWeight: 'bold' }}>Live Attendance Dashboard</span>
-              </Typography>
-              
-              <Box sx={{ mb: 2, p: 2, bgcolor: 'gold', borderRadius: 2 }}>
-                <Typography variant="body2" sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <span>👑</span>
-                  <span>You are the Meeting Owner</span>
-                </Typography>
-              </Box>
-
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Real-time attendance tracking (updates every 10s)
-              </Typography>
-
-              {liveAttendance.length === 0 ? (
-                <Box sx={{ textAlign: 'center', py: 3 }}>
-                  <Typography color="text.secondary">
-                    Waiting for participants to register faces...
-                  </Typography>
-                </Box>
-              ) : (
-                <Box>
-                  {liveAttendance.map((participant, index) => {
-                    const percent = participant.totalTime > 0 
-                      ? Math.round((participant.verifiedTime / participant.totalTime) * 100) 
-                      : 0;
-                    const status = percent >= 75 ? 'Present' : percent >= 50 ? 'Partial' : 'Absent';
-                    const statusColor = status === 'Present' ? '#4CAF50' : status === 'Partial' ? '#FF9800' : '#F44336';
-                    const statusEmoji = status === 'Present' ? '✅' : status === 'Partial' ? '⚠️' : '❌';
-
-                    return (
-                      <Card key={index} sx={{ mb: 2, borderLeft: `4px solid ${statusColor}`, elevation: 3 }}>
-                        <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-                            <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                              {participant.userName || participant.userId || 'Unknown'}
-                            </Typography>
-                            <Chip 
-                              label={`${statusEmoji} ${status}`}
-                              size="small"
-                              sx={{ 
-                                bgcolor: statusColor, 
-                                color: 'white',
-                                fontWeight: 'bold'
-                              }}
-                            />
-                          </Box>
-                          
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                            <Typography variant="body2" color="text.secondary">
-                              Total Time:
-                            </Typography>
-                            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                              {Math.floor(participant.totalTime / 60)}m {participant.totalTime % 60}s
-                            </Typography>
-                          </Box>
-
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                            <Typography variant="body2" color="text.secondary">
-                              Face Detected:
-                            </Typography>
-                            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                              {Math.floor(participant.verifiedTime / 60)}m {participant.verifiedTime % 60}s
-                            </Typography>
-                          </Box>
-
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                            <Typography variant="body2" color="text.secondary">
-                              Attendance:
-                            </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Typography variant="h6" sx={{ fontWeight: 'bold', color: statusColor }}>
-                                {percent}%
-                              </Typography>
-                            </Box>
-                          </Box>
-
-                          <Box sx={{ mt: 1 }}>
-                            <Box sx={{ 
-                              height: 8, 
-                              bgcolor: '#e0e0e0', 
-                              borderRadius: 1, 
-                              overflow: 'hidden' 
-                            }}>
-                              <Box sx={{ 
-                                height: '100%', 
-                                width: `${percent}%`, 
-                                bgcolor: statusColor,
-                                transition: 'width 0.3s ease'
-                              }} />
-                            </Box>
-                          </Box>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </Box>
+              {videos.length === 0 && !(video && videoAvailable) && (
+                <div className={styles.emptyState}>Waiting for participants...</div>
               )}
+            </section>
 
-              <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 2 }}>
-                <Typography variant="caption" sx={{ display: 'block', mb: 0.5 }}>
-                  <strong>Legend:</strong>
-                </Typography>
-                <Typography variant="caption" sx={{ display: 'block' }}>
-                  ✅ Present (≥75%) | ⚠️ Partial (50-74%) | ❌ Absent (&lt;50%)
-                </Typography>
-              </Box>
+            {/* RIGHT SIDEBAR */}
+            <aside className={`${styles.sidebar} ${!sidebarOpen ? styles.sidebarClosed : ''}`}>
+              <nav className={styles.sidebarTabs}>
+                <button onClick={() => handleTabChange('chat')} className={`${styles.tabButton} ${activeTab === 'chat' ? styles.tabActive : ''}`}>
+                  Chat {newMessages > 0 && <span className={styles.chatBadge}>{newMessages}</span>}
+                </button>
+                <button onClick={() => handleTabChange('attendance')} className={`${styles.tabButton} ${activeTab === 'attendance' ? styles.tabActive : ''}`}>
+                  Attendance
+                </button>
+                <button onClick={() => handleTabChange('info')} className={`${styles.tabButton} ${activeTab === 'info' ? styles.tabActive : ''}`}>
+                  Info
+                </button>
+              </nav>
+
+              <div className={styles.tabContent}>
+                {/* TAB 1: CHAT */}
+                {activeTab === 'chat' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                    <div className={styles.chatMessages}>
+                      {messages.length > 0 ? messages.map((m, i) => (
+                        <div key={i} className={styles.chatMessage}>
+                          <div className={`${styles.chatAvatar} ${m.sender === username ? styles.chatAvatarLocal : styles.chatAvatarRemote}`}>
+                            {(m.sender || '?')[0].toUpperCase()}
+                          </div>
+                          <div className={styles.chatBubble}>
+                            <p className={styles.chatSender}>
+                              {m.sender}
+                              <span className={styles.chatTime}>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            </p>
+                            <p>{m.data}</p>
+                          </div>
+                        </div>
+                      )) : (
+                        <p style={{ color: '#45464d', textAlign: 'center', padding: '40px 0' }}>No messages yet</p>
+                      )}
+                    </div>
+                    <div className={styles.chatInputArea}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        value={message}
+                        onChange={e => setMessage(e.target.value)}
+                        onKeyPress={e => e.key === 'Enter' && sendMessage()}
+                        placeholder="Type a message..."
+                        variant="outlined"
+                      />
+                      <Button variant="contained" onClick={sendMessage} sx={{ minWidth: '80px', flexShrink: 0 }}>
+                        Send
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 2: ATTENDANCE */}
+                {activeTab === 'attendance' && (
+                  <div className={styles.attendancePanel}>
+                    {isMeetingOwner ? (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#e2dfff', borderRadius: 12 }}>
+                          <span style={{ fontSize: 20 }}>👑</span>
+                          <span style={{ fontWeight: 700, fontSize: 14, color: '#3323cc' }}>Live Attendance Dashboard</span>
+                        </div>
+                        {liveAttendance.length === 0 ? (
+                          <p style={{ color: '#45464d', textAlign: 'center', padding: '20px' }}>Waiting for participants to register faces...</p>
+                        ) : (
+                          liveAttendance.map((p, i) => {
+                            const percent = p.totalTime > 0 ? Math.round((p.verifiedTime / p.totalTime) * 100) : 0;
+                            const status = percent >= 75 ? 'Present' : percent >= 50 ? 'Partial' : 'Absent';
+                            const color = getStatusColor(status);
+                            return (
+                              <div key={i} className={styles.attendanceCard} style={{ borderLeftColor: color }}>
+                                <div className={styles.attendanceName}>
+                                  <span>{p.userName || p.userId || 'Unknown'}</span>
+                                  <span style={{ color, fontWeight: 700 }}>{getStatusEmoji(status)} {status}</span>
+                                </div>
+                                <div className={styles.attendanceStat}>
+                                  <span>Total: {Math.floor(p.totalTime / 60)}m {p.totalTime % 60}s</span>
+                                  <span>Verified: {Math.floor(p.verifiedTime / 60)}m {p.verifiedTime % 60}s</span>
+                                </div>
+                                <div className={styles.attendanceBar}>
+                                  <div className={styles.attendanceBarFill} style={{ width: `${percent}%`, background: color }} />
+                                </div>
+                                <div style={{ textAlign: 'right', fontSize: 11, fontWeight: 700, color, marginTop: 4 }}>{percent}%</div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </>
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                        <p style={{ fontSize: 14, color: '#45464d' }}>Attendance tracking is managed by the meeting owner.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 3: INFO */}
+                {activeTab === 'info' && (
+                  <div className={styles.infoPanel}>
+                    <div className={styles.infoRow}>
+                      <span className={styles.infoLabel}>Meeting Code</span>
+                      <span className={styles.infoValue}>{meetingCode}</span>
+                    </div>
+                    <div className={styles.infoRow}>
+                      <span className={styles.infoLabel}>Participants</span>
+                      <span className={styles.infoValue}>{videos.length + 1}</span>
+                    </div>
+                    <div className={styles.infoRow}>
+                      <span className={styles.infoLabel}>Your Name</span>
+                      <span className={styles.infoValue}>{username || 'Anonymous'}</span>
+                    </div>
+                    <div className={styles.infoRow}>
+                      <span className={styles.infoLabel}>Connection</span>
+                      <span className={styles.infoValue} style={{ color: '#4CAF50' }}>Connected</span>
+                    </div>
+                    <div className={styles.infoRow}>
+                      <span className={styles.infoLabel}>Face Tracking</span>
+                      <span className={styles.infoValue} style={{ color: faceDescriptor ? '#4CAF50' : '#FF9800' }}>
+                        {faceDescriptor ? 'Active' : 'Not enrolled'}
+                      </span>
+                    </div>
+                    <div style={{ marginTop: 16, padding: 12, background: '#f2f4f6', borderRadius: 12 }}>
+                      <p style={{ fontSize: 12, color: '#45464d', fontWeight: 600, marginBottom: 8 }}>Tips</p>
+                      <ul style={{ fontSize: 12, color: '#45464d', paddingLeft: 16, lineHeight: 1.8 }}>
+                        <li>Enroll your face for AI attendance tracking</li>
+                        <li>Owner receives attendance report when ending the meeting</li>
+                        <li>Attendance is based on face detection percentage</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className={styles.sidebarFooter}>
+                <div className={styles.searchIconWrapper}>
+                  <SearchIcon className={styles.searchIcon} />
+                  <input className={styles.searchInput} placeholder="Ask AI to find something..." type="text" />
+                </div>
+              </div>
+            </aside>
+          </main>
+
+          {/* BOTTOM CONTROL BAR */}
+          <footer className={styles.bottomBar}>
+            <div className={styles.meetingInfo}>
+              <p className={styles.meetingName}>Weekly Strategy Sync</p>
+              <p className={styles.meetingMeta}>{videos.length + 1} Participants • Live</p>
             </div>
-          )}
+            <div className={styles.controlsCenter}>
+              <button onClick={handleAudio} className={`${styles.controlButton} ${!audio ? styles.controlDisabled : ''}`} title={audio ? "Mute Microphone" : "Unmute Microphone"}>
+                {audio ? <MicIcon /> : <MicOffIcon />}
+              </button>
+              <button onClick={handleVideo} className={`${styles.controlButton} ${!video ? styles.controlDisabled : ''}`} title="Toggle Video">
+                {video ? <VideocamIcon /> : <VideocamOffIcon />}
+              </button>
+              {screenAvailable && (
+                <button onClick={handleScreen} className={styles.controlButton} title="Share Screen">
+                  {screen ? <StopScreenShareIcon /> : <ScreenShareIcon />}
+                </button>
+              )}
+              <button className={styles.controlButton} title="Reactions">
+                <SentimentSatisfiedIcon />
+              </button>
+              <button onClick={handleEndCall} className={styles.leaveButton} title={isMeetingOwner ? "End Meeting & Generate Report" : "Leave Meeting"}>
+                <CallEndIcon />
+                <span>Leave</span>
+              </button>
+            </div>
+            <div className={styles.controlsRight}>
+              <button onClick={toggleSidebar} className={`${styles.controlButton} ${sidebarOpen ? styles.controlActive : ''}`} title="Toggle Sidebar">
+                <AnalyticsIcon />
+              </button>
+              <button className={styles.controlButton} title="More">
+                <MoreVertIcon />
+              </button>
+            </div>
+          </footer>
         </div>
       )}
 
