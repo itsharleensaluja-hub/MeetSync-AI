@@ -103,23 +103,6 @@
   margin-left: -8px;
 }
 
-.recordingBadge {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 16px;
-  background: #ba1a1a;
-  color: white;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.05em;
-}
-
-.recordingBadge svg {
-  font-size: 18px;
-}
-
 /* ===== MAIN CONTENT ===== */
 .mainContent {
   flex: 1;

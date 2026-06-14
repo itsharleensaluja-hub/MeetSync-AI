@@ -36,7 +36,7 @@ import AnalyticsIcon from '@mui/icons-material/Analytics';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import SearchIcon from '@mui/icons-material/Search';
 import SentimentSatisfiedIcon from '@mui/icons-material/SentimentSatisfied';
-import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
+
 import server from '../environment';
 
 const server_url = server;
@@ -1528,12 +1528,6 @@ const handleVideo = async () => {
                   <div className={styles.avatarCount}>+{videos.length - 2}</div>
                 )}
               </div>
-              {isMeetingOwner && (
-                <div className={styles.recordingBadge}>
-                  <RecordVoiceOverIcon />
-                  Recording
-                </div>
-              )}
             </div>
           </header>
 
