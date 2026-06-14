@@ -1209,18 +1209,20 @@ const enrollFace = async () => {
 
 const handleVideo = async () => {
   if (video) {
-    // TURNING OFF: disable tracks locally + on all peers
+    // TURNING OFF: stop local video tracks (releases camera, turns off LED)
     if (window.localStream) {
       window.localStream.getVideoTracks().forEach(track => {
-        track.enabled = false;
+        track.stop();
+        window.localStream.removeTrack(track);
       });
     }
+    // Replace video sender with null on all peer connections
     for (let id in connections) {
       if (id === socketIdRef.current) continue;
       const senders = connections[id].getSenders();
       const videoSender = senders.find(s => s.track?.kind === 'video');
-      if (videoSender && videoSender.track) {
-        videoSender.track.enabled = false;
+      if (videoSender) {
+        try { videoSender.replaceTrack(null); } catch (e) { console.error('replaceTrack(null) error:', e); }
       }
     }
     setVideo(false);
