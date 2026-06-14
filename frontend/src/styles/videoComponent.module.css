@@ -115,56 +115,81 @@
 .videoGrid {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  grid-auto-rows: 1fr;
-  gap: 8px;
-  padding: 8px;
+  gap: 16px;
+  padding: 24px;
   background: #0a0c14;
-  align-items: stretch;
-  justify-items: stretch;
+  place-items: center;
+  align-content: center;
   overflow: hidden;
+  transition: grid-template-columns 0.3s ease;
 }
 
 .videoTile {
   position: relative;
-  border-radius: 12px;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
   overflow: hidden;
-  background: #e0e3e5;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  min-height: 0;
+  background: linear-gradient(135deg, #1a1f33, #0d1123);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  animation: tileIn 0.3s ease-out both;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.videoTile:hover {
+  transform: scale(1.02);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  border-color: rgba(100, 94, 251, 0.3);
 }
 
 .speakerGlow {
-  box-shadow: 0 0 15px rgba(100, 94, 251, 0.3);
+  box-shadow: 0 0 20px rgba(100, 94, 251, 0.4);
   border-color: #645efb;
 }
 
 .videoElement {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
 .avatarPlaceholder {
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #131b2e, rgba(100, 94, 251, 0.2));
+  background: linear-gradient(135deg, #0f1428, #1a1f3a);
 }
 
 .avatarPlaceholder span {
-  width: 80px;
-  height: 80px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
-  background: #645efb;
+  background: linear-gradient(135deg, #645efb, #7c78ff);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
   color: white;
+  box-shadow: 0 4px 15px rgba(100, 94, 251, 0.3);
+  user-select: none;
+}
+
+@keyframes tileIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .videoLabel {
@@ -214,6 +239,40 @@
 
 .ownerBadge span {
   font-size: 16px;
+}
+
+.handIndicator {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 24px;
+  line-height: 1;
+  animation: handPulse 1.5s ease-in-out infinite;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));
+  pointer-events: none;
+}
+
+@keyframes handPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+}
+
+.handBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #FFD700;
+  color: #191c1e;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  box-shadow: 0 2px 6px rgba(255, 215, 0, 0.5);
 }
 
 /* ===== SIDEBAR ===== */
@@ -431,6 +490,83 @@
   font-size: 14px;
   font-weight: 600;
   color: #191c1e;
+}
+
+.participantsPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 4px;
+}
+
+.participantsHeader {
+  padding: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #45464d;
+  border-bottom: 1px solid #c6c6cd;
+  margin-bottom: 8px;
+}
+
+.participantRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  transition: background 0.15s;
+}
+
+.participantRow:hover {
+  background: #f2f4f6;
+}
+
+.participantAvatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #645efb, #7c76ff);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.participantInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.participantName {
+  font-size: 14px;
+  font-weight: 600;
+  color: #191c1e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.participantYou {
+  font-size: 12px;
+  font-weight: 400;
+  color: #645efb;
+  margin-left: 6px;
+}
+
+.participantHandIcon {
+  font-size: 20px;
+  flex-shrink: 0;
+  animation: handPulse 1.5s ease-in-out infinite;
+}
+
+.participantsEmpty {
+  padding: 32px;
+  text-align: center;
+  font-size: 13px;
+  color: #45464d;
 }
 
 .sidebarFooter {

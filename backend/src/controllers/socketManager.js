@@ -34,6 +34,8 @@ let meetingStartTimes = {}; // Tracks when each meeting started
 let polls = {};
 // decisions: { 'meeting-code': [{ id, text, proposedBy, timestamp }] }
 let decisions = {};
+// raisedHands: { 'meeting-code': [{ socketId, userId, userName }] }
+let raisedHands = {};
 
 /**
  * Extract structured summary from transcript entries.
@@ -202,6 +204,15 @@ export const connectToSocket = (server) => {
             for (let a = 0; a < connections[path].length; a++) {
                 io.to(connections[path][a].socketId).emit("user-joined", socket.id, connections[path].map(u => u.socketId));
             }
+
+            // Send full participant list to everyone in the room
+            const roomParticipants = (connections[path] || []).map(u => ({
+                socketId: u.socketId,
+                userId: u.userId,
+                userName: u.userName,
+                hasRaisedHand: (raisedHands[path] || []).some(r => r.socketId === u.socketId),
+            }));
+            io.to(path).emit("participant-list", roomParticipants);
 
             // Send all previous chat messages to the newly joined user
             if (messages[path] !== undefined) {
@@ -441,6 +452,29 @@ export const connectToSocket = (server) => {
             io.to(meetingId).emit("reaction-received", { emoji, from, id: Date.now() });
         });
 
+        // Hand raise / lower
+        socket.on("raise-hand", ({ meetingId, userId, userName, raised }) => {
+            if (!raisedHands[meetingId]) raisedHands[meetingId] = [];
+            if (raised) {
+                if (!raisedHands[meetingId].find(u => u.userId === userId)) {
+                    raisedHands[meetingId].push({ socketId: socket.id, userId, userName });
+                }
+            } else {
+                raisedHands[meetingId] = raisedHands[meetingId].filter(u => u.userId !== userId);
+                if (raisedHands[meetingId].length === 0) delete raisedHands[meetingId];
+            }
+            io.to(meetingId).emit("hand-raise-update", raisedHands[meetingId] || []);
+            // Update participant list with new hand raise state
+            const updatedList = (connections[meetingId] || []).map(u => ({
+                socketId: u.socketId,
+                userId: u.userId,
+                userName: u.userName,
+                hasRaisedHand: (raisedHands[meetingId] || []).some(r => r.socketId === u.socketId),
+            }));
+            io.to(meetingId).emit("participant-list", updatedList);
+            console.log(`✋ Hand ${raised ? 'raised' : 'lowered'} by ${userName} in ${meetingId}`);
+        });
+
         // ==================== TRANSCRIPT & SUMMARY ====================
 
         // Relay live transcript entry to all participants
@@ -518,10 +552,29 @@ Highlight important decisions made and action items assigned. If none, return em
                     // Remove user
                     v.splice(index, 1);
 
+                    // Remove from raised hands
+                    if (raisedHands[k]) {
+                        raisedHands[k] = raisedHands[k].filter(u => u.socketId !== socket.id);
+                        if (raisedHands[k].length === 0) delete raisedHands[k];
+                        io.to(k).emit("hand-raise-update", raisedHands[k] || []);
+                    }
+
+                    // Emit updated participant list
+                    if (v.length > 0) {
+                        const remaining = v.map(u => ({
+                            socketId: u.socketId,
+                            userId: u.userId,
+                            userName: u.userName,
+                            hasRaisedHand: (raisedHands[k] || []).some(r => r.socketId === u.socketId),
+                        }));
+                        io.to(k).emit("participant-list", remaining);
+                    }
+
                     // Clean empty room
                     if (v.length === 0) {
                         delete connections[k];
                         delete messages[k];
+                        delete raisedHands[k];
                     }
                     break;
                 }

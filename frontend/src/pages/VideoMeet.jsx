@@ -36,6 +36,7 @@ import AnalyticsIcon from '@mui/icons-material/Analytics';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import SearchIcon from '@mui/icons-material/Search';
 import SentimentSatisfiedIcon from '@mui/icons-material/SentimentSatisfied';
+import PanToolIcon from '@mui/icons-material/PanTool';
 
 import server from '../environment';
 
@@ -126,6 +127,11 @@ export default function VideoMeetComponent() {
   // Reactions state
   const [reactions, setReactions] = useState([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  // Hand raise state
+  const [handRaised, setHandRaised] = useState(false);
+  const [raisedHandUsers, setRaisedHandUsers] = useState([]);
+  const [participantList, setParticipantList] = useState([]);
 
   // Transcript & Summary state
   const [transcript, setTranscript] = useState([]);
@@ -866,6 +872,14 @@ const enrollFace = async () => {
         setShowSummaryModal(true);
       });
 
+      socketRef.current.on('hand-raise-update', (users) => {
+        setRaisedHandUsers(users || []);
+      });
+
+      socketRef.current.on('participant-list', (participants) => {
+        setParticipantList(participants || []);
+      });
+
       socketRef.current.on('chat-message', addMessage);
       socketRef.current.on('user-left', id => {
         console.log('👋 User left:', id);
@@ -939,36 +953,22 @@ const enrollFace = async () => {
           connections[socketListId].ontrack = e => {
             console.log(`📹 Received track from peer ${socketListId}:`, e.track.kind);
             console.log(`  ⬇️ Track details: ${e.track.label} - Enabled: ${e.track.enabled} - Muted: ${e.track.muted} - ReadyState: ${e.track.readyState}`);
-            
-            let remoteStream = null;
-            if (e.streams && e.streams[0]) {
-              remoteStream = e.streams[0];
-            } else {
-              // Create new stream if not provided
-              const existing = videos.find(v => v.socketId === socketListId);
-              if (existing && existing.stream) {
-                remoteStream = existing.stream;
-                remoteStream.addTrack(e.track);
-              } else {
-                remoteStream = new MediaStream();
-                remoteStream.addTrack(e.track);
-              }
-            }
-            
+
+            const remoteStream = e.streams && e.streams[0]
+              ? e.streams[0]
+              : new MediaStream([e.track]);
+
             console.log(`🎤 Remote stream now has ${remoteStream.getAudioTracks().length} audio, ${remoteStream.getVideoTracks().length} video tracks`);
-            
-            const exists = videos.find(v => v.socketId === socketListId);
-            if (exists) {
-              setVideos(v =>
-                v.map(vid =>
-                  vid.socketId === socketListId
-                    ? { ...vid, stream: remoteStream }
-                    : vid,
-                ),
-              );
-            } else {
-              setVideos(v => [...v, { socketId: socketListId, stream: remoteStream }]);
-            }
+
+            setVideos(prev => {
+              const idx = prev.findIndex(v => v.socketId === socketListId);
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = { ...next[idx], stream: remoteStream };
+                return next;
+              }
+              return [...prev, { socketId: socketListId, stream: remoteStream }];
+            });
           };
           if (window.localStream) {
             console.log(`✅ Adding localStream to new peer connection ${socketListId}`);
@@ -1423,6 +1423,17 @@ const handleVideo = async () => {
     setShowEmojiPicker(prev => !prev);
   };
 
+  const toggleHandRaise = () => {
+    const newState = !handRaised;
+    setHandRaised(newState);
+    socketRef.current?.emit('raise-hand', {
+      meetingId: meetingCode,
+      userId: uniqueUserId,
+      userName: username || 'Anonymous',
+      raised: newState,
+    });
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'Present': return '#4CAF50';
@@ -1440,6 +1451,12 @@ const handleVideo = async () => {
       default: return '❓';
     }
   };
+
+  const participantCount = 1 + videos.length;
+  const gridCols = participantCount <= 1 ? 1
+    : participantCount <= 4 ? 2
+    : participantCount <= 9 ? 3
+    : 4;
 
   return (
     <div>
@@ -1533,7 +1550,8 @@ const handleVideo = async () => {
 
           <main className={styles.mainContent}>
             {/* VIDEO GRID */}
-            <section className={styles.videoGrid}>
+            <section className={styles.videoGrid}
+              style={{ gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}>
               {/* Local video */}
               <div className={`${styles.videoTile} ${isMeetingOwner ? styles.speakerGlow : ''}`}>
                 <video ref={localVideoref} autoPlay muted playsInline className={styles.videoElement}
@@ -1548,6 +1566,7 @@ const handleVideo = async () => {
                   <span>You</span>
                 </div>
                 {isMeetingOwner && <div className={styles.ownerBadge}><span>👑</span> Owner</div>}
+                {handRaised && <div className={styles.handIndicator}>✋</div>}
               </div>
 
               {/* Remote videos */}
@@ -1582,6 +1601,7 @@ const handleVideo = async () => {
                     <MicIcon />
                     <span>{v.userName || `User ${index + 1}`}</span>
                   </div>
+                  {raisedHandUsers.some(u => u.socketId === v.socketId) && <div className={styles.handIndicator}>✋</div>}
                 </div>
               ))}
 
@@ -1604,6 +1624,9 @@ const handleVideo = async () => {
                 </button>
                 <button onClick={() => handleTabChange('transcript')} className={`${styles.tabButton} ${activeTab === 'transcript' ? styles.tabActive : ''}`}>
                   Transcript
+                </button>
+                <button onClick={() => handleTabChange('participants')} className={`${styles.tabButton} ${activeTab === 'participants' ? styles.tabActive : ''}`}>
+                  Participants {raisedHandUsers.length > 0 && <span className={styles.handBadge}>{raisedHandUsers.length}</span>}
                 </button>
                 <button onClick={() => handleTabChange('info')} className={`${styles.tabButton} ${activeTab === 'info' ? styles.tabActive : ''}`}>
                   Info
@@ -1878,7 +1901,36 @@ const handleVideo = async () => {
                   </div>
                 )}
 
-                {/* TAB 4: INFO */}
+                {/* TAB 4: PARTICIPANTS */}
+                {activeTab === 'participants' && (
+                  <div className={styles.participantsPanel}>
+                    <div className={styles.participantsHeader}>
+                      <span>{participantList.length} Participant{participantList.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    {participantList.map(p => {
+                      const isLocal = p.userId === uniqueUserId;
+                      return (
+                        <div key={p.socketId || p.userId} className={styles.participantRow}>
+                          <div className={styles.participantAvatar}>
+                            {(p.userName || '?')[0].toUpperCase()}
+                          </div>
+                          <div className={styles.participantInfo}>
+                            <span className={styles.participantName}>
+                              {p.userName || 'Anonymous'}
+                              {isLocal && <span className={styles.participantYou}>(You)</span>}
+                            </span>
+                          </div>
+                          {p.hasRaisedHand && <span className={styles.participantHandIcon}>✋</span>}
+                        </div>
+                      );
+                    })}
+                    {participantList.length === 0 && (
+                      <div className={styles.participantsEmpty}>No participants yet</div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 5: INFO */}
                 {activeTab === 'info' && (
                   <div className={styles.infoPanel}>
                     <div className={styles.infoRow}>
@@ -1963,15 +2015,23 @@ const handleVideo = async () => {
                   </div>
                 )}
               </button>
+              <button onClick={toggleHandRaise} className={`${styles.controlButton} ${handRaised ? styles.controlActive : ''}`} title={handRaised ? "Lower Hand" : "Raise Hand"}>
+                <PanToolIcon />
+              </button>
               <button onClick={handleEndCall} className={styles.leaveButton} title={isMeetingOwner ? "End Meeting & Generate Report" : "Leave Meeting"}>
                 <CallEndIcon />
                 <span>Leave</span>
               </button>
             </div>
             <div className={styles.controlsRight}>
-              <button onClick={toggleSidebar} className={`${styles.controlButton} ${sidebarOpen ? styles.controlActive : ''}`} title="Toggle Sidebar">
-                <AnalyticsIcon />
-              </button>
+              <div style={{ position: 'relative' }}>
+                <button onClick={toggleSidebar} className={`${styles.controlButton} ${sidebarOpen ? styles.controlActive : ''}`} title="Toggle Sidebar">
+                  <AnalyticsIcon />
+                </button>
+                {raisedHandUsers.length > 0 && (
+                  <span className={styles.handBadge}>{raisedHandUsers.length}</span>
+                )}
+              </div>
               <button className={styles.controlButton} title="More">
                 <MoreVertIcon />
               </button>
