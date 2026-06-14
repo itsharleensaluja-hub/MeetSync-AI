@@ -310,15 +310,20 @@ const enrollFace = async () => {
     console.log('🎯 Starting attendance tracking for:', userId || username || 'guest');
 
     const interval = setInterval(async () => {
-      //added check for video readiness
       const videoEl = localVideoref.current;
+      const hasLiveVideo = window.localStream?.getVideoTracks().some(t => t.readyState === 'live');
       if (
         !videoEl ||
         !videoEl.srcObject ||
-        videoEl.videoWidth === 0 ||
-        videoEl.videoHeight === 0
+        !hasLiveVideo
       ) {
-        console.log('⚠️ Video not ready for face detection');
+        console.log('⚠️ Video not ready — reporting 0 verified time');
+        socketRef.current?.emit('verified-update', {
+          meetingId: meetingCode,
+          userId: uniqueUserId,
+          userName: username,
+          verifiedDelta: 0,
+        });
         return;
       }
 
