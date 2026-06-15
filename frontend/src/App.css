@@ -26,7 +26,7 @@
   display: flex;
   gap: 1.6rem;
   cursor: pointer;
-
+  align-items: center;
 }
 
 .landingMainContainer {

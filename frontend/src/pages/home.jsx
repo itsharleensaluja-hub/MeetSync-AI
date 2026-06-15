@@ -11,30 +11,59 @@
  */
 
 import React, { useContext, useState } from 'react'
-import withAuth from '../utils/withAuth' // Higher-order component for authentication check
+import withAuth from '../utils/withAuth'
 import { useNavigate } from 'react-router-dom'
 import "../App.css";
 import { Button, IconButton, TextField } from '@mui/material';
-import RestoreIcon from '@mui/icons-material/Restore'; // History icon
-import BarChartIcon from '@mui/icons-material/BarChart'; // Analytics icon
+import RestoreIcon from '@mui/icons-material/Restore';
+import BarChartIcon from '@mui/icons-material/BarChart';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { AuthContext } from '../contexts/AuthContext';
 
 function HomeComponent() {
 
     let navigate = useNavigate();
-    // State to store the meeting code entered by user
-    const [meetingCode, setMeetingCode] = useState("");
-
-    // Get function to save meeting to history
+    const [joinInput, setJoinInput] = useState("");
+    const [createdCode, setCreatedCode] = useState("");
+    const [copied, setCopied] = useState(false);
     const {addToUserHistory} = useContext(AuthContext);
-    
-    // Handle joining a video call
+
+    const generateCode = () => Math.random().toString(36).substring(2, 10);
+
+    const extractCode = (input) => {
+        try {
+            const url = new URL(input);
+            return url.pathname.replace(/^\/|\/$/g, '');
+        } catch {
+            return input.trim();
+        }
+    };
+
+    const handleCreateMeeting = () => {
+        setCreatedCode(generateCode());
+        setCopied(false);
+    };
+
+    const handleCopyLink = async () => {
+        const link = `${window.location.origin}/${createdCode}`;
+        try {
+            await navigator.clipboard.writeText(link);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch {}
+    };
+
+    const handleStartMeeting = async () => {
+        await addToUserHistory(createdCode);
+        navigate(`/${createdCode}`);
+    };
+
     let handleJoinVideoCall = async () => {
-        // Save this meeting to user's history
-        await addToUserHistory(meetingCode)
-        // Navigate to the video meeting page with the meeting code as URL parameter
-        navigate(`/${meetingCode}`)
-    }
+        const code = extractCode(joinInput);
+        if (!code) return;
+        await addToUserHistory(code);
+        navigate(`/${code}`);
+    };
 
     return (
         <>
@@ -60,7 +89,7 @@ function HomeComponent() {
 
                     {/* Logout button - clears token and redirects to auth page */}
                     <Button onClick={() => {
-                        localStorage.removeItem("token") // Clear authentication token
+                        localStorage.removeItem("token")
                         navigate("/auth")
                     }}>
                         Logout
@@ -76,10 +105,53 @@ function HomeComponent() {
                     <div>
                         <h2>Start or join a meeting in seconds</h2>
 
+                        {/* Create Meeting */}
+                        <div style={{ marginBottom: '24px' }}>
+                            <Button
+                                onClick={handleCreateMeeting}
+                                variant='contained'
+                                sx={{ mb: 2 }}
+                            >
+                                Create Meeting
+                            </Button>
+
+                            {createdCode && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' }}>
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        <TextField
+                                            value={`${window.location.origin}/${createdCode}`}
+                                            variant="outlined"
+                                            size="small"
+                                            InputProps={{ readOnly: true }}
+                                            sx={{ flexGrow: 1 }}
+                                        />
+                                        <Button
+                                            onClick={handleCopyLink}
+                                            variant="outlined"
+                                            size="small"
+                                            startIcon={<ContentCopyIcon />}
+                                            sx={{ minWidth: 100 }}
+                                        >
+                                            {copied ? 'Copied!' : 'Copy'}
+                                        </Button>
+                                    </div>
+                                    <Button onClick={handleStartMeeting} variant="contained" color="primary">
+                                        Start Meeting
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Join Meeting */}
                         <div style={{ display: 'flex', gap: "10px" }}>
-                            {/* Input field for meeting code */}
-                            <TextField onChange={e => setMeetingCode(e.target.value)} id="outlined-basic" label="Meeting Code" variant="outlined" />
-                            {/* Join button */}
+                            <TextField
+                                onChange={e => setJoinInput(e.target.value)}
+                                id="outlined-basic"
+                                label="Paste link or enter code"
+                                variant="outlined"
+                                value={joinInput}
+                                onKeyDown={e => { if (e.key === 'Enter') handleJoinVideoCall(); }}
+                            />
                             <Button onClick={handleJoinVideoCall} variant='contained'>Join</Button>
                         </div>
                     </div>
@@ -93,6 +165,4 @@ function HomeComponent() {
     )
 }
 
-// Wrap component with authentication check
-// If user is not logged in, they'll be redirected to /auth
 export default withAuth(HomeComponent)

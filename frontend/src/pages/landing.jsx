@@ -25,9 +25,9 @@ export default function LandingPage() {
                     <h2>MeetSync AI</h2>
                 </div>
                 <div className='navlist'>
-                    {/* Join as guest - goes to test meeting room */}
+                    {/* Join as guest - goes to meeting join page */}
                     <p onClick={() => {
-                        router("/aljk23") // Random meeting code for testing
+                        router("/join")
                     }}>Join as Guest</p>
                     
                     {/* Go to registration page */}

@@ -875,6 +875,24 @@
   letter-spacing: 0.1em;
 }
 
+.lobbyCopyBtn {
+  margin-left: auto;
+  padding: 4px;
+}
+
+.lobbyCopyBtn:hover {
+  background: rgba(100, 94, 251, 0.1);
+}
+
+.lobbyLinkText {
+  font-size: 12px;
+  color: #8a8fa8;
+  text-align: center;
+  margin-top: -12px;
+  margin-bottom: 20px;
+  word-break: break-all;
+}
+
 .lobbyInput {
   width: 100%;
   padding: 12px 14px;

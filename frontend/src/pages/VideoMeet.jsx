@@ -38,6 +38,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import SearchIcon from '@mui/icons-material/Search';
 import SentimentSatisfiedIcon from '@mui/icons-material/SentimentSatisfied';
 import PanToolIcon from '@mui/icons-material/PanTool';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import server from '../environment';
 
 const server_url = server;
@@ -115,6 +116,7 @@ export default function VideoMeetComponent() {
   const [faceDescriptor, setFaceDescriptor] = useState(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const [attendanceReport, setAttendanceReport] = useState(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [isMeetingOwner, setIsMeetingOwner] = useState(false);
   const [ownerReportReceived, setOwnerReportReceived] = useState(false);
@@ -1665,6 +1667,15 @@ const enrollFace = async () => {
     setJoinRequests(prev => prev.filter(r => r.socketId !== requesterSocketId));
   };
 
+  const copyMeetingLink = async () => {
+    const link = `${window.location.origin}/${meetingCode}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {}
+  };
+
   const connect = async () => {
     setAskForUsername(false);
     await getMedia();
@@ -1758,6 +1769,17 @@ const enrollFace = async () => {
               <div className={styles.lobbyCodeRow}>
                 <span className={styles.lobbyCodeLabel}>Room</span>
                 <span className={styles.lobbyCodeValue}>{meetingCode}</span>
+                <IconButton
+                  onClick={copyMeetingLink}
+                  size="small"
+                  className={styles.lobbyCopyBtn}
+                  title="Copy meeting link"
+                >
+                  <ContentCopyIcon sx={{ fontSize: 16, color: linkCopied ? '#4CAF50' : '#645efb' }} />
+                </IconButton>
+              </div>
+              <div className={styles.lobbyLinkText}>
+                {window.location.origin}/{meetingCode}
               </div>
 
               <input
@@ -2292,6 +2314,20 @@ const enrollFace = async () => {
                     <div className={styles.infoRow}>
                       <span className={styles.infoLabel}>Meeting Code</span>
                       <span className={styles.infoValue}>{meetingCode}</span>
+                      <IconButton
+                        onClick={copyMeetingLink}
+                        size="small"
+                        title="Copy meeting link"
+                        sx={{ ml: 'auto', p: 0.5 }}
+                      >
+                        <ContentCopyIcon sx={{ fontSize: 16, color: linkCopied ? '#4CAF50' : '#b0b7d3' }} />
+                      </IconButton>
+                    </div>
+                    <div className={styles.infoRow}>
+                      <span className={styles.infoLabel}>Meeting Link</span>
+                      <span className={styles.infoValue} style={{ fontSize: 12, wordBreak: 'break-all' }}>
+                        {window.location.origin}/{meetingCode}
+                      </span>
                     </div>
                     <div className={styles.infoRow}>
                       <span className={styles.infoLabel}>Participants</span>
