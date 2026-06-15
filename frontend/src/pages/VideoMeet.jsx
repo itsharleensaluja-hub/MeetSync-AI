@@ -1872,18 +1872,20 @@ const enrollFace = async () => {
               <div className={styles.navDivider}></div>
               <span className={styles.navSubtitle}>Live Room</span>
             </div>
-            <div className={styles.topNavRight}>
-              <div className={styles.avatarStack}>
-                {videos.slice(0, 2).map(v => (
-                  <div key={v.socketId} className={styles.avatarImg} style={{ background: '#645efb', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '12px', fontWeight: 700 }}>
-                    {(v.userName || 'U')[0].toUpperCase()}
-                  </div>
-                ))}
-                {videos.length > 2 && (
-                  <div className={styles.avatarCount}>+{videos.length - 2}</div>
-                )}
+            {videos.filter(v => v.userName).length > 0 && (
+              <div className={styles.topNavRight}>
+                <div className={styles.avatarStack}>
+                  {videos.filter(v => v.userName).slice(0, 2).map(v => (
+                    <div key={v.socketId} className={styles.avatarImg} style={{ background: '#645efb', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '12px', fontWeight: 700 }}>
+                      {v.userName[0].toUpperCase()}
+                    </div>
+                  ))}
+                  {videos.filter(v => v.userName).length > 2 && (
+                    <div className={styles.avatarCount}>+{videos.filter(v => v.userName).length - 2}</div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </header>
 
           {/* Join requests banner for meeting owner */}
