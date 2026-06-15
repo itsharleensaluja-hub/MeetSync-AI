@@ -2397,20 +2397,32 @@ const enrollFace = async () => {
       )}
 
       {/* ENROLLMENT MODAL */}
-      <Modal open={showEnrollmentModal}>
+      <Modal
+        open={showEnrollmentModal}
+        slotProps={{
+          backdrop: {
+            sx: {
+              backgroundColor: '#0a0c14',
+              opacity: '1 !important',
+            }
+          }
+        }}
+      >
         <Box
           sx={{
             position: 'absolute',
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            bgcolor: 'white',
+            bgcolor: '#0f1428',
+            backgroundImage: 'linear-gradient(135deg, #0f1428, #1a1f3a)',
             p: 5,
             borderRadius: 4,
-            boxShadow: 24,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
             textAlign: 'center',
             width: { xs: '95%', sm: 550 },
             maxWidth: '650px',
+            border: '1px solid rgba(100, 94, 251, 0.2)',
           }}
         >
           <Typography
@@ -2423,8 +2435,7 @@ const enrollFace = async () => {
           </Typography>
           <Typography
             variant="body1"
-            color="text.secondary"
-            sx={{ mb: 4 }}
+            sx={{ mb: 4, color: '#b0b7d3' }}
           >
             Look directly at the camera and stay still
           </Typography>
@@ -2440,7 +2451,7 @@ const enrollFace = async () => {
               height: '380px',
               borderRadius: '20px',
               background: '#000',
-              border: '8px solid #1976d2',
+              border: '8px solid #645efb',
               objectFit: 'cover',
               margin: '20px 0',
             }}
