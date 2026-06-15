@@ -1504,4 +1504,184 @@
   filter: brightness(1.15);
 }
 
+/* ===== WAITING ROOM ===== */
+.waitingRoomWrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #131b2e;
+}
+
+.waitingRoomBody {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.waitingRoomCard {
+  text-align: center;
+  max-width: 400px;
+  padding: 48px;
+}
+
+.waitingRoomIcon {
+  margin-bottom: 24px;
+}
+
+.waitingRoomTitle {
+  font-size: 24px;
+  font-weight: 700;
+  color: #e8eaf0;
+  margin: 0 0 12px;
+}
+
+.waitingRoomSub {
+  font-size: 14px;
+  color: #8a8fa8;
+  line-height: 1.6;
+  margin: 0 0 32px;
+}
+
+.waitingRoomSpinner {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.waitingRoomDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #7c5cfc;
+  animation: waitingBounce 1.4s ease-in-out infinite;
+}
+
+.waitingRoomDot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.waitingRoomDot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes waitingBounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+.waitingRoomRejected {
+  margin-top: 24px;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(244, 67, 54, 0.1);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+.waitingRoomRejected p {
+  color: #f44336;
+  font-size: 14px;
+  margin: 0 0 16px;
+}
+
+.waitingRoomBackBtn {
+  padding: 8px 24px;
+  border: none;
+  border-radius: 8px;
+  background: #645efb;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.waitingRoomBackBtn:hover {
+  filter: brightness(1.15);
+}
+
+/* ===== JOIN REQUESTS BAR (owner) ===== */
+.joinRequestsBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 24px;
+  background: #1a2340;
+  border-bottom: 1px solid #2a3350;
+  flex-shrink: 0;
+}
+
+.joinRequestsLabel {
+  font-size: 12px;
+  font-weight: 700;
+  color: #7c5cfc;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-right: 4px;
+}
+
+.joinRequestItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 8px;
+  border-radius: 8px;
+  background: #232d4a;
+}
+
+.joinRequestAvatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #645efb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.joinRequestName {
+  font-size: 13px;
+  color: #e8eaf0;
+  font-weight: 500;
+}
+
+.joinRequestApproveBtn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(76, 175, 80, 0.15);
+  color: #4CAF50;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.joinRequestApproveBtn:hover {
+  background: rgba(76, 175, 80, 0.3);
+}
+
+.joinRequestRejectBtn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(244, 67, 54, 0.15);
+  color: #f44336;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.joinRequestRejectBtn:hover {
+  background: rgba(244, 67, 54, 0.3);
+}
+
 

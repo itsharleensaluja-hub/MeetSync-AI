@@ -44,6 +44,7 @@ const server_url = server;
 
 let connections = {};
 let iceCandidateQueue = {}; // Queue ICE candidates until remote description is set
+let pendingSdp = {}; // Queue SDP offers that arrive before peer connection is created
 
 const peerConfigConnections = {
   iceServers: [
@@ -90,6 +91,7 @@ export default function VideoMeetComponent() {
   const localVideoref = useRef();  // main in‑call video
   const lobbyVideoRef = useRef();  // lobby preview
   const modalVideoRef = useRef();  // enrollment video
+  const waitingForApprovalRef = useRef(false);  // ref to avoid stale closures
 
   // Core states
   const [videoAvailable, setVideoAvailable] = useState(true);
@@ -135,6 +137,10 @@ export default function VideoMeetComponent() {
   const [handRaised, setHandRaised] = useState(false);
   const [raisedHandUsers, setRaisedHandUsers] = useState([]);
   const [participantList, setParticipantList] = useState([]);
+
+  const [isWaitingForApproval, setIsWaitingForApproval] = useState(false);
+  const [joinRequests, setJoinRequests] = useState([]);
+  const [joinRejectedMessage, setJoinRejectedMessage] = useState('');
 
   // Transcript & Summary state
   const [transcript, setTranscript] = useState([]);
@@ -402,6 +408,14 @@ const enrollFace = async () => {
       }
     }
   }, [askForUsername, modelsLoaded, faceDescriptor, isMeetingOwner]);
+
+  // Attach local stream to the in-call video element when the meeting UI renders
+  // (fires for both direct join and waiting-room approval)
+  useEffect(() => {
+    if (!askForUsername && !isWaitingForApproval && localVideoref.current && window.localStream) {
+      localVideoref.current.srcObject = window.localStream;
+    }
+  }, [askForUsername, isWaitingForApproval]);
 
   // === CORE WEBRTC & MEDIA FUNCTIONS ===
   const getPermissions = async () => {
@@ -748,12 +762,27 @@ const enrollFace = async () => {
       if (signal.sdp) {
         const peerConnection = connections[fromId];
         if (!peerConnection) {
-          console.warn(`⚠️ No peer connection for ${fromId}, ignoring signal`);
+          console.warn(`⚠️ No peer connection for ${fromId}, queuing raw SDP for replay`);
+          pendingSdp[fromId] = message; // raw string, replay via gotMessageFromServer after PC created
           return;
         }
 
         const currentState = peerConnection.signalingState;
         console.log(`📡 Received ${signal.sdp.type} from ${fromId}, current state: ${currentState}`);
+
+        // If we're still creating our initial offer, defer incoming offers
+        if (peerConnection._creatingOffer && signal.sdp.type === 'offer') {
+          console.warn(`⏭️ Deferring offer from ${fromId} while initial offer is being created`);
+          pendingSdp[fromId] = message;
+          return;
+        }
+
+        // Ignore answers that arrive in stable state (race: local offer wasn't set yet,
+        // or exchange already completed)
+        if (signal.sdp.type === 'answer' && currentState === 'stable') {
+          console.warn(`⏭️ Ignoring answer from ${fromId}, state already stable`);
+          return;
+        }
 
         // Handle offer collision - determine who backs off
         const isPolite = socketIdRef.current < fromId; // Lower socket ID is "polite"
@@ -818,6 +847,12 @@ const enrollFace = async () => {
       
       if (signal.ice) {
         const peerConnection = connections[fromId];
+        if (!peerConnection) {
+          console.warn(`⚠️ No peer connection for ${fromId}, queueing ICE candidate`);
+          if (!iceCandidateQueue[fromId]) iceCandidateQueue[fromId] = [];
+          iceCandidateQueue[fromId].push(signal.ice);
+          return;
+        }
         if (peerConnection) {
           // Check if remote description is set
           if (peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
@@ -858,6 +893,27 @@ const enrollFace = async () => {
       socketRef.current.on('you-are-owner', () => {
         console.log('👑 Server confirmed: You are the meeting owner');
         setIsMeetingOwner(true);
+      });
+
+      // Waiting room: user must wait for host approval
+      socketRef.current.on('waiting-for-approval', () => {
+        console.log('⏳ You are in the waiting room. Waiting for host approval...');
+        waitingForApprovalRef.current = true;
+        setIsWaitingForApproval(true);
+      });
+
+      // Waiting room: host receives join request
+      socketRef.current.on('join-request', ({ socketId, userId, userName }) => {
+        console.log(`🔔 Join request from: ${userName} (${socketId})`);
+        setJoinRequests(prev => [...prev, { socketId, userId, userName }]);
+      });
+
+      // Waiting room: host rejected the join request
+      socketRef.current.on('join-rejected', ({ message }) => {
+        console.log('❌ Join request rejected:', message);
+        waitingForApprovalRef.current = false;
+        setIsWaitingForApproval(false);
+        setJoinRejectedMessage(message);
       });
 
       // Listen for live attendance updates (for dashboard)
@@ -937,12 +993,23 @@ const enrollFace = async () => {
           delete iceCandidateQueue[id];
           console.log('🗑️ Cleared ICE candidate queue for:', id);
         }
+        // Clean up pending SDP queue
+        if (pendingSdp[id]) {
+          delete pendingSdp[id];
+          console.log('🗑️ Cleared pending SDP for:', id);
+        }
       });
       socketRef.current.on('user-joined', (id, clients) => {
         console.log('🎉 user-joined event received!');
         console.log('  Event ID:', id);
         console.log('  Clients array:', clients);
         console.log('  My socket ID:', socketIdRef.current);
+        // If we were waiting for approval, we're now admitted
+        if (waitingForApprovalRef.current) {
+          console.log('✅ Host approved you! Joining the meeting...');
+          waitingForApprovalRef.current = false;
+          setIsWaitingForApproval(false);
+        }
         
         clients.forEach(socketListId => {
           // DON'T create peer connection to yourself!
@@ -1037,26 +1104,33 @@ const enrollFace = async () => {
             
             console.log(`🔊 All tracks successfully added to peer ${socketListId}`);
             
-            // CRITICAL: Create offer to negotiate the connection
+            // Mark that we're creating an initial offer so gotMessageFromServer defers incoming offers
+            connections[socketListId]._creatingOffer = true;
+            
+            // Always create an offer so polite/impolite collision logic can resolve
+            console.log(`📤 Creating offer for ${socketListId}`);
             connections[socketListId].createOffer()
-              .then(description => {
-                return connections[socketListId].setLocalDescription(description);
-              })
+              .then(description => connections[socketListId].setLocalDescription(description))
               .then(() => {
                 console.log(`📤 Sending offer to peer ${socketListId}`);
-                socketRef.current.emit(
-                  'signal',
-                  socketListId,
-                  JSON.stringify({ sdp: connections[socketListId].localDescription })
-                );
+                socketRef.current.emit('signal', socketListId, JSON.stringify({ sdp: connections[socketListId].localDescription }));
               })
-              .catch(err => {
-                console.error(`❌ Error creating offer for ${socketListId}:`, err);
+              .catch(err => console.error(`❌ Error creating offer for ${socketListId}:`, err))
+              .finally(() => {
+                connections[socketListId]._creatingOffer = false;
+                // After offer created, replay any SDP that arrived before PC existed or during offer creation
+                if (pendingSdp[socketListId]) {
+                  console.log(`📦 Replaying queued SDP for ${socketListId} through collision handler`);
+                  const rawMsg = pendingSdp[socketListId];
+                  delete pendingSdp[socketListId];
+                  gotMessageFromServer(socketListId, rawMsg);
+                }
               });
           } else {
             console.error('❌ ERROR: window.localStream is null! Cannot add stream to peer connection.');
           }
         });
+        console.log(`[DIAG] user-joined handler: created ${clients.filter(c => c !== socketIdRef.current && !connections[c]).length} new peer connections`);
       });
     });
   };
@@ -1383,77 +1457,85 @@ const enrollFace = async () => {
     return -1;
   };
 
-const handleVideo = async () => {
-  if (video) {
-    // TURNING OFF: stop local video tracks (releases camera, turns off LED)
-    if (window.localStream) {
-      window.localStream.getVideoTracks().forEach(track => {
-        track.stop();
-        window.localStream.removeTrack(track);
-      });
+  // Finds a video RTCRtpSender by checking transceivers first (works even after replaceTrack(null))
+  const findVideoSender = (pc) => {
+    if (pc.getTransceivers) {
+      const tr = pc.getTransceivers().find(t => t.receiver.track.kind === 'video');
+      if (tr) return tr.sender;
     }
-    // Replace video sender with null on all peer connections
-    for (let id in connections) {
-      if (id === socketIdRef.current) continue;
-      const senders = connections[id].getSenders();
-      const videoSender = senders.find(s => s.track?.kind === 'video');
-      if (videoSender) {
-        try { videoSender.replaceTrack(null); } catch (e) { console.error('replaceTrack(null) error:', e); }
-      }
-    }
-    setVideo(false);
-  } else {
-    // TURNING ON: get fresh camera track, replace on all peers
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 } }
-      });
-      const newTrack = stream.getVideoTracks()[0];
-      if (!newTrack) { setVideo(false); return; }
+    return pc.getSenders().find(s => s.track?.kind === 'video') || null;
+  };
 
-      // Replace video track in local stream
-      const local = window.localStream;
-      if (local) {
-        local.getVideoTracks().forEach(t => { local.removeTrack(t); t.stop(); });
-        local.addTrack(newTrack);
-      } else {
-        window.localStream = stream;
+  const handleVideo = async () => {
+    if (video) {
+      // TURNING OFF: stop local video tracks (releases camera, turns off LED)
+      if (window.localStream) {
+        window.localStream.getVideoTracks().forEach(track => {
+          track.stop();
+          window.localStream.removeTrack(track);
+        });
       }
-
-      // Replace video sender track on all peer connections
+      // Replace video sender with null on all peer connections
       for (let id in connections) {
         if (id === socketIdRef.current) continue;
-        const senders = connections[id].getSenders();
-        const videoSender = senders.find(s => s.track?.kind === 'video');
+        const videoSender = findVideoSender(connections[id]);
         if (videoSender) {
-          try { await videoSender.replaceTrack(newTrack); } catch (e) { console.error(e); }
-        } else {
-          connections[id].addTrack(newTrack, window.localStream || stream);
+          try { videoSender.replaceTrack(null); } catch (e) { console.error('replaceTrack(null) error:', e); }
         }
       }
-
-      // Force keyframe via renegotiation on all peers
-      for (let id in connections) {
-        if (id === socketIdRef.current) continue;
-        const pc = connections[id];
-        if (pc.signalingState !== 'stable') continue;
-        try {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          socketRef.current.emit('signal', id, JSON.stringify({ sdp: pc.localDescription }));
-        } catch (e) {
-          console.error('Renegotiation error for', id, e);
-        }
-      }
-
-      if (localVideoref.current) localVideoref.current.srcObject = window.localStream;
-      setVideo(true);
-    } catch (err) {
-      console.error('Failed to re-acquire camera:', err);
       setVideo(false);
+    } else {
+      // TURNING ON: get fresh camera track, replace on all peers
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+        const newTrack = stream.getVideoTracks()[0];
+        if (!newTrack) { setVideo(false); return; }
+
+        // Replace video track in local stream
+        const local = window.localStream;
+        if (local) {
+          local.getVideoTracks().forEach(t => { local.removeTrack(t); t.stop(); });
+          local.addTrack(newTrack);
+        } else {
+          window.localStream = stream;
+        }
+
+        // Replace video sender track on all peer connections
+        for (let id in connections) {
+          if (id === socketIdRef.current) continue;
+          const videoSender = findVideoSender(connections[id]);
+          if (videoSender) {
+            try { await videoSender.replaceTrack(newTrack); } catch (e) { console.error(e); }
+          } else {
+            connections[id].addTrack(newTrack, window.localStream || stream);
+          }
+        }
+
+        // Force keyframe via renegotiation on all peers
+        for (let id in connections) {
+          if (id === socketIdRef.current) continue;
+          const pc = connections[id];
+          if (pc.signalingState !== 'stable') continue;
+          try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socketRef.current.emit('signal', id, JSON.stringify({ sdp: pc.localDescription }));
+          } catch (e) {
+            console.error('Renegotiation error for', id, e);
+          }
+        }
+
+        if (localVideoref.current) localVideoref.current.srcObject = window.localStream;
+        setVideo(true);
+      } catch (err) {
+        console.error('Failed to re-acquire camera:', err);
+        setVideo(false);
+      }
     }
-  }
-};
+  };
+
 
 
   // debug audio
@@ -1565,6 +1647,22 @@ const handleVideo = async () => {
     socketRef.current?.emit('end-meeting', { meetingId: meetingCode });
     // Don't stop tracks or redirect yet - let user see the report first
     // They will be stopped when modal is closed
+  };
+
+  const handleApproveJoin = (requesterSocketId) => {
+    socketRef.current?.emit('approve-join', {
+      meetingId: meetingCode,
+      requesterSocketId,
+    });
+    setJoinRequests(prev => prev.filter(r => r.socketId !== requesterSocketId));
+  };
+
+  const handleRejectJoin = (requesterSocketId) => {
+    socketRef.current?.emit('reject-join', {
+      meetingId: meetingCode,
+      requesterSocketId,
+    });
+    setJoinRequests(prev => prev.filter(r => r.socketId !== requesterSocketId));
   };
 
   const connect = async () => {
@@ -1693,6 +1791,53 @@ const handleVideo = async () => {
             </div>
           </main>
         </div>
+      ) : isWaitingForApproval ? (
+        <div className={styles.waitingRoomWrapper}>
+          <header className={styles.topNav}>
+            <div className={styles.topNavLeft}>
+              <div className={styles.logoIcon}>
+                <PsychologyIcon />
+              </div>
+              <h1 className={styles.navTitle}>MeetSync AI</h1>
+              <div className={styles.navDivider}></div>
+              <span className={styles.navSubtitle}>Live Room</span>
+            </div>
+            <div className={styles.topNavRight}>
+              <span style={{ fontSize: 12, color: '#8a8fa8' }}>Waiting for approval</span>
+            </div>
+          </header>
+          <main className={styles.waitingRoomBody}>
+            <div className={styles.waitingRoomCard}>
+              <div className={styles.waitingRoomIcon}>
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#7c5cfc" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 6v6l4 2"/>
+                </svg>
+              </div>
+              <h2 className={styles.waitingRoomTitle}>Waiting for Host</h2>
+              <p className={styles.waitingRoomSub}>
+                The meeting host has been notified. You'll be admitted shortly.
+              </p>
+              <div className={styles.waitingRoomSpinner}>
+                <div className={styles.waitingRoomDot}></div>
+                <div className={styles.waitingRoomDot}></div>
+                <div className={styles.waitingRoomDot}></div>
+              </div>
+              {joinRejectedMessage && (
+                <div className={styles.waitingRoomRejected}>
+                  <p>{joinRejectedMessage}</p>
+                  <button className={styles.waitingRoomBackBtn} onClick={() => {
+                    setJoinRejectedMessage('');
+                    setIsWaitingForApproval(false);
+                    setAskForUsername(true);
+                  }}>
+                    Go Back
+                  </button>
+                </div>
+              )}
+            </div>
+          </main>
+        </div>
       ) : (
         <div className={styles.meetVideoContainer}>
           {/* TOP NAV */}
@@ -1718,6 +1863,40 @@ const handleVideo = async () => {
               </div>
             </div>
           </header>
+
+          {/* Join requests banner for meeting owner */}
+          {isMeetingOwner && joinRequests.length > 0 && (
+            <div className={styles.joinRequestsBar}>
+              <span className={styles.joinRequestsLabel}>Join Requests</span>
+              {joinRequests.map(req => (
+                <div key={req.socketId} className={styles.joinRequestItem}>
+                  <div className={styles.joinRequestAvatar}>
+                    {(req.userName || 'U')[0].toUpperCase()}
+                  </div>
+                  <span className={styles.joinRequestName}>{req.userName}</span>
+                  <button
+                    className={styles.joinRequestApproveBtn}
+                    onClick={() => handleApproveJoin(req.socketId)}
+                    title="Approve"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </button>
+                  <button
+                    className={styles.joinRequestRejectBtn}
+                    onClick={() => handleRejectJoin(req.socketId)}
+                    title="Reject"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           <main className={styles.mainContent}>
             {/* VIDEO GRID */}

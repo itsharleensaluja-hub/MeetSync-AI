@@ -37,6 +37,10 @@ let decisions = {};
 // raisedHands: { 'meeting-code': [{ socketId, userId, userName }] }
 let raisedHands = {};
 
+// waitingRoom: { 'meeting-code': [{ socketId, userId, userName }] }
+// Users waiting for host approval before entering the meeting
+let waitingRoom = {};
+
 /**
  * Extract structured summary from transcript entries.
  * Uses multi-language keyword detection to highlight decisions and action items.
@@ -172,6 +176,26 @@ export const connectToSocket = (server) => {
                 meetingStartTimes[path] = new Date();
             }
 
+            // WAITING ROOM: if room already has an owner and participants,
+            // put this user in the waiting room instead of admitting them directly
+            if (meetingOwners[path] && connections[path].length > 0) {
+                if (!waitingRoom[path]) waitingRoom[path] = [];
+                waitingRoom[path].push({ socketId: socket.id, userId, userName });
+                console.log(`⏳ User ${userName} (${userId}) added to waiting room for meeting: ${path}`);
+
+                // Notify the meeting owner
+                const ownerUserId = meetingOwners[path];
+                const ownerUser = connections[path].find(u => u.userId === ownerUserId);
+                if (ownerUser) {
+                    io.to(ownerUser.socketId).emit('join-request', { socketId: socket.id, userId, userName });
+                    console.log(`🔔 Join request sent to owner for: ${userName}`);
+                }
+
+                // Tell the user they're waiting for approval
+                io.to(socket.id).emit('waiting-for-approval');
+                return;
+            }
+
             // Set meeting owner - use isOwner flag from client, fall back to first-join
             if (isOwner && !meetingOwners[path]) {
                 meetingOwners[path] = userId;
@@ -221,6 +245,68 @@ export const connectToSocket = (server) => {
                         messages[path][a]['sender'], messages[path][a]['socket-id-sender']);
                 }
             }
+        });
+
+        // EVENT: Owner approves a waiting user
+        socket.on("approve-join", ({ meetingId, requesterSocketId }) => {
+            const waiters = waitingRoom[meetingId];
+            if (!waiters) return;
+            const idx = waiters.findIndex(w => w.socketId === requesterSocketId);
+            if (idx === -1) return;
+            const [waiter] = waiters.splice(idx, 1);
+
+            // Join the approved socket to the room
+            const requesterSocket = io.sockets.sockets.get(requesterSocketId);
+            if (!requesterSocket) {
+                console.warn(`⚠️ Cannot approve ${waiter.userName} — socket ${requesterSocketId} is stale/disconnected`);
+                return;
+            }
+            requesterSocket.join(meetingId);
+
+            // Add to connections (same logic as join-call)
+            connections[meetingId].push({
+                socketId: waiter.socketId,
+                userId: waiter.userId,
+                userName: waiter.userName,
+                totalTime: 0,
+                verifiedTime: 0
+            });
+
+            timeOnline[waiter.socketId] = new Date();
+
+            // Notify everyone including the approved user
+            const allSocketIds = connections[meetingId].map(u => u.socketId);
+            for (let a = 0; a < connections[meetingId].length; a++) {
+                io.to(connections[meetingId][a].socketId).emit("user-joined", waiter.socketId, allSocketIds);
+            }
+
+            // Update participant list
+            const roomParticipants = connections[meetingId].map(u => ({
+                socketId: u.socketId, userId: u.userId, userName: u.userName,
+                hasRaisedHand: (raisedHands[meetingId] || []).some(r => r.socketId === u.socketId),
+            }));
+            io.to(meetingId).emit("participant-list", roomParticipants);
+
+            // Send chat history to the approved user
+            if (messages[meetingId] !== undefined) {
+                for (let a = 0; a < messages[meetingId].length; ++a) {
+                    io.to(waiter.socketId).emit("chat-message", messages[meetingId][a]['data'],
+                        messages[meetingId][a]['sender'], messages[meetingId][a]['socket-id-sender']);
+                }
+            }
+
+            console.log(`✅ ${waiter.userName} approved and joined meeting: ${meetingId}`);
+        });
+
+        // EVENT: Owner rejects a waiting user
+        socket.on("reject-join", ({ meetingId, requesterSocketId }) => {
+            const waiters = waitingRoom[meetingId];
+            if (!waiters) return;
+            const idx = waiters.findIndex(w => w.socketId === requesterSocketId);
+            if (idx === -1) return;
+            waiters.splice(idx, 1);
+            io.to(requesterSocketId).emit('join-rejected', { message: 'Host declined your request to join.' });
+            console.log(`❌ Join request rejected for socket: ${requesterSocketId}`);
         });
 
         // WebRTC signaling
@@ -395,6 +481,7 @@ export const connectToSocket = (server) => {
                 // Clean up meeting tracking data
                 delete meetingOwners[meetingId];
                 delete meetingStartTimes[meetingId];
+                delete waitingRoom[meetingId];
             } catch (err) {
                 console.error("❌ Error saving attendance:", err);
             }
@@ -580,7 +667,18 @@ If any field has no items, return an empty array for that field. Transcript:`
                         delete connections[k];
                         delete messages[k];
                         delete raisedHands[k];
+                        delete waitingRoom[k];
                     }
+                    break;
+                }
+            }
+
+            // Also remove from waiting room if they disconnected while waiting
+            for (const [k, w] of Object.entries(waitingRoom)) {
+                const wIdx = w.findIndex(u => u.socketId === socket.id);
+                if (wIdx !== -1) {
+                    w.splice(wIdx, 1);
+                    if (w.length === 0) delete waitingRoom[k];
                     break;
                 }
             }
