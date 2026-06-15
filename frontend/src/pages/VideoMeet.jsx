@@ -37,12 +37,6 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import SearchIcon from '@mui/icons-material/Search';
 import SentimentSatisfiedIcon from '@mui/icons-material/SentimentSatisfied';
 import PanToolIcon from '@mui/icons-material/PanTool';
-import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
-import StopIcon from '@mui/icons-material/Stop';
-
-import { RecordingProvider, useRecording } from '../contexts/RecordingContext';
-import RecordingControls from '../components/RecordingControls';
-
 import server from '../environment';
 
 const server_url = server;
@@ -1615,19 +1609,6 @@ const handleVideo = async () => {
     }
   };
 
-  function TopNavRecordingIndicator() {
-    const r = useRecording();
-    if (!r.isRecording) return null;
-    const m = String(Math.floor(r.recordingDuration / 60)).padStart(2, '0');
-    const s = String(r.recordingDuration % 60).padStart(2, '0');
-    return (
-      <div className={styles.recordingIndicator}>
-        <span className={styles.recordingDot} />
-        <span className={styles.recordingTimer}>REC {m}:{s}</span>
-      </div>
-    );
-  }
-
   const participantCount = 1 + videos.length;
   const gridCols = participantCount <= 1 ? 1
     : participantCount <= 4 ? 2
@@ -1699,7 +1680,6 @@ const handleVideo = async () => {
           </main>
         </div>
       ) : (
-        <RecordingProvider>
         <div className={styles.meetVideoContainer}>
           {/* TOP NAV */}
           <header className={styles.topNav}>
@@ -1712,7 +1692,6 @@ const handleVideo = async () => {
               <span className={styles.navSubtitle}>Live Room</span>
             </div>
             <div className={styles.topNavRight}>
-              <TopNavRecordingIndicator />
               <div className={styles.avatarStack}>
                 {videos.slice(0, 2).map(v => (
                   <div key={v.socketId} className={styles.avatarImg} style={{ background: '#645efb', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '12px', fontWeight: 700 }}>
@@ -2201,7 +2180,6 @@ const handleVideo = async () => {
               <button onClick={toggleHandRaise} className={`${styles.controlButton} ${handRaised ? styles.controlActive : ''}`} title={handRaised ? "Lower Hand" : "Raise Hand"}>
                 <PanToolIcon />
               </button>
-              <RecordingControls isOwner={isMeetingOwner} meetingCode={meetingCode} />
               <button onClick={handleEndCall} className={styles.leaveButton} title={isMeetingOwner ? "End Meeting & Generate Report" : "Leave Meeting"}>
                 <CallEndIcon />
                 <span>Leave</span>
@@ -2222,7 +2200,6 @@ const handleVideo = async () => {
             </div>
           </footer>
         </div>
-        </RecordingProvider>
       )}
 
       {/* ENROLLMENT MODAL */}
