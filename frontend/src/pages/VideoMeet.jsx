@@ -1973,7 +1973,7 @@ const enrollFace = async () => {
                   />
                   <div className={styles.videoLabel}>
                     <MicIcon />
-                    <span>{v.userName || `User ${index + 1}`}</span>
+                    <span>{participantList.find(p => p.socketId === v.socketId)?.userName || `User ${index + 1}`}</span>
                   </div>
                   {raisedHandUsers.some(u => u.socketId === v.socketId) && <div className={styles.handIndicator}>✋</div>}
                 </div>
