@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom'
 import "../App.css";
 import { Button, IconButton, TextField } from '@mui/material';
 import RestoreIcon from '@mui/icons-material/Restore'; // History icon
+import BarChartIcon from '@mui/icons-material/BarChart'; // Analytics icon
 import { AuthContext } from '../contexts/AuthContext';
 
 function HomeComponent() {
@@ -46,14 +47,16 @@ function HomeComponent() {
 
                 <div style={{ display: "flex", alignItems: "center" }}>
                     {/* History button - shows past meetings */}
-                    <IconButton onClick={
-                        () => {
-                            navigate("/history")
-                        }
-                    }>
+                    <IconButton onClick={() => navigate("/history")}>
                         <RestoreIcon />
                     </IconButton>
                     <p>History</p>
+
+                    {/* Analytics button - shows attendance dashboard */}
+                    <IconButton onClick={() => navigate("/attendance-analytics")}>
+                        <BarChartIcon />
+                    </IconButton>
+                    <p>Analytics</p>
 
                     {/* Logout button - clears token and redirects to auth page */}
                     <Button onClick={() => {

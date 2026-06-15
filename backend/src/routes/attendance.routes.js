@@ -16,9 +16,15 @@ router.get("/owner/:userId", async (req, res) => {
     try {
         const { userId } = req.params;
         
-        const reports = await Attendance.find({ meetingOwner: userId })
-            .sort({ date: -1 }) // Most recent first
-            .limit(50); // Limit to last 50 meetings
+        const reports = await Attendance.find({
+            $or: [
+                { meetingOwner: userId },
+                { meetingOwner: { $regex: `^${userId}_` } },
+                { "participants.name": userId }
+            ]
+        })
+            .sort({ date: -1 })
+            .limit(50);
         
         return res.status(200).json({
             success: true,

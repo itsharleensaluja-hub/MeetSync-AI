@@ -18,6 +18,7 @@ import {
   Chip,
 } from '@mui/material';
 import { AuthContext } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 import React, { useEffect, useRef, useState, useContext } from 'react';
 import io from 'socket.io-client';
@@ -82,6 +83,7 @@ const tinyOptions = new faceapi.TinyFaceDetectorOptions({
 //   });
 
 export default function VideoMeetComponent() {
+  const navigate = useNavigate();
   // Refs
   const socketRef = useRef();
   const socketIdRef = useRef();
@@ -101,6 +103,8 @@ export default function VideoMeetComponent() {
   const [newMessages, setNewMessages] = useState(0);
   const [askForUsername, setAskForUsername] = useState(true);
   const [username, setUsername] = useState('');
+  // Sync username to localStorage for attendance analytics across pages
+  useEffect(() => { if (username) localStorage.setItem('meetingOwnerName', username); }, [username]);
   const [videos, setVideos] = useState([]);
 
   // Attendance states
@@ -2383,26 +2387,35 @@ const handleVideo = async () => {
               ))}
             </TableBody>
           </Table>
-          <Button
-            onClick={() => {
-              setShowReportModal(false);
-              // Clean up and redirect after closing report
-              try {
-                if (localVideoref.current?.srcObject) {
-                  localVideoref.current.srcObject.getTracks().forEach(t => t.stop());
+          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', gap: 2 }}>
+            <Button
+              onClick={() => {
+                setShowReportModal(false);
+                try {
+                  if (localVideoref.current?.srcObject) {
+                    localVideoref.current.srcObject.getTracks().forEach(t => t.stop());
+                  }
+                } catch (e) {
+                  console.error('Error stopping tracks:', e);
                 }
-              } catch (e) {
-                console.error('Error stopping tracks:', e);
-              }
-              setTimeout(() => {
-                window.location.href = '/';
-              }, 300);
-            }}
-            variant="contained"
-            sx={{ mt: 3, display: 'block', mx: 'auto' }}
-          >
-            Close & Exit Meeting
-          </Button>
+                setTimeout(() => {
+                  window.location.href = '/';
+                }, 300);
+              }}
+              variant="contained"
+            >
+              Close & Exit
+            </Button>
+            <Button
+              onClick={() => {
+                setShowReportModal(false);
+                navigate('/attendance-analytics');
+              }}
+              variant="outlined"
+            >
+              View Full Analytics
+            </Button>
+          </Box>
         </Box>
       </Modal>
 

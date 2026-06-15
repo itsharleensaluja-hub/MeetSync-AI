@@ -324,11 +324,14 @@ export const connectToSocket = (server) => {
                 console.log(`⚠️ No meeting owner found for: ${meetingId}`);
             }
 
-            console.log(`📋 Room has ${room.length} participants:`, room.map(u => ({ userId: u.userId, totalTime: u.totalTime, verifiedTime: u.verifiedTime })));
+            console.log(`📋 Room has ${room.length} participants:`, room.map(u => ({ userId: u.userId, userName: u.userName, totalTime: u.totalTime, verifiedTime: u.verifiedTime })));
+
+            const ownerUser = room.find(u => u.userId === owner);
+            const ownerName = ownerUser ? ownerUser.userName : 'unknown';
 
             const report = { 
                 meetingId,
-                meetingOwner: owner || 'unknown',
+                meetingOwner: ownerName,
                 startTime: startTime || new Date(),
                 endTime: new Date(),
                 participants: [],

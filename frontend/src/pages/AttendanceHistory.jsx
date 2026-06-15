@@ -1,60 +1,36 @@
-/**
- * ATTENDANCE HISTORY PAGE - AttendanceHistory.jsx
- * Shows attendance reports for meetings owned by the logged-in user
- */
-
-import React, { useEffect, useState, useContext } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
-  Container, 
-  Typography, 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableContainer, 
-  TableHead, 
-  TableRow, 
-  Paper,
-  Box,
-  Card,
-  CardContent,
-  Chip,
-  CircularProgress,
-  Alert,
-  Button,
-  Collapse,
-  IconButton
+  Container, Typography, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, Paper, Box, Card, CardContent, Chip,
+  CircularProgress, Alert, Button, Collapse, IconButton, TextField
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import { AuthContext } from '../contexts/AuthContext';
 import server from '../environment';
 
 export default function AttendanceHistory() {
-  const { userId } = useContext(AuthContext) || {};
+  const [ownerName, setOwnerName] = useState(() => localStorage.getItem('meetingOwnerName') || '');
+  const [nameInput, setNameInput] = useState('');
   const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [expandedReports, setExpandedReports] = useState({});
 
   useEffect(() => {
-    fetchAttendanceReports();
-  }, [userId]);
+    if (ownerName) fetchAttendanceReports(ownerName);
+  }, []);
 
-  const fetchAttendanceReports = async () => {
-    if (!userId) {
-      setError('Please log in to view attendance reports');
-      setLoading(false);
-      return;
-    }
-
+  const fetchAttendanceReports = async (name) => {
+    if (!name) return;
     try {
       setLoading(true);
-      const response = await fetch(`${server}/api/v1/attendance/owner/${userId}`);
+      setError(null);
+      const response = await fetch(`${server}/api/v1/attendance/owner/${encodeURIComponent(name)}`);
       const data = await response.json();
 
       if (data.success) {
         setReports(data.data);
-        setError(null);
+        if (data.count === 0) setError(null);
       } else {
         setError(data.message || 'Failed to fetch reports');
       }
@@ -66,29 +42,29 @@ export default function AttendanceHistory() {
     }
   };
 
+  const handleSubmitName = () => {
+    const trimmed = nameInput.trim();
+    if (!trimmed) return;
+    localStorage.setItem('meetingOwnerName', trimmed);
+    setOwnerName(trimmed);
+    setNameInput('');
+    fetchAttendanceReports(trimmed);
+  };
+
   const toggleExpand = (reportId) => {
-    setExpandedReports(prev => ({
-      ...prev,
-      [reportId]: !prev[reportId]
-    }));
+    setExpandedReports(prev => ({ ...prev, [reportId]: !prev[reportId] }));
   };
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'Present':
-        return 'success';
-      case 'Partial':
-        return 'warning';
-      case 'Absent':
-        return 'error';
-      default:
-        return 'default';
+      case 'Present': return 'success';
+      case 'Partial': return 'warning';
+      case 'Absent': return 'error';
+      default: return 'default';
     }
   };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString();
-  };
+  const formatDate = (dateString) => new Date(dateString).toLocaleString();
 
   const calculateSummary = (participants) => {
     const present = participants.filter(p => p.status === 'Present').length;
@@ -97,37 +73,52 @@ export default function AttendanceHistory() {
     return { present, partial, absent, total: participants.length };
   };
 
-  if (loading) {
-    return (
-      <Container maxWidth="lg" sx={{ mt: 4, textAlign: 'center' }}>
-        <CircularProgress />
-        <Typography sx={{ mt: 2 }}>Loading attendance reports...</Typography>
-      </Container>
-    );
-  }
-
-  if (error) {
-    return (
-      <Container maxWidth="lg" sx={{ mt: 4 }}>
-        <Alert severity="error">{error}</Alert>
-        <Button onClick={fetchAttendanceReports} sx={{ mt: 2 }}>
-          Retry
-        </Button>
-      </Container>
-    );
-  }
-
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Typography variant="h4" gutterBottom sx={{ mb: 3 }}>
-        📊 My Meeting Attendance Reports
+        My Meeting Attendance Reports
       </Typography>
-      
-      {reports.length === 0 ? (
-        <Alert severity="info">
-          No attendance reports found. You haven't hosted any meetings with attendance tracking yet.
+
+      {!ownerName && (
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 3, p: 2, bgcolor: 'grey.100', borderRadius: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Enter the name you used in the meeting:
+          </Typography>
+          <TextField
+            label="Your display name"
+            variant="outlined"
+            size="small"
+            value={nameInput}
+            onChange={e => setNameInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleSubmitName(); }}
+            sx={{ minWidth: 200 }}
+          />
+          <Button variant="contained" size="small" onClick={handleSubmitName}>View</Button>
+        </Box>
+      )}
+
+      {loading && (
+        <Box sx={{ textAlign: 'center', py: 8 }}>
+          <CircularProgress />
+          <Typography sx={{ mt: 2 }}>Loading attendance reports...</Typography>
+        </Box>
+      )}
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+          <Button size="small" sx={{ ml: 2 }} onClick={() => fetchAttendanceReports(ownerName)}>Retry</Button>
         </Alert>
-      ) : (
+      )}
+
+      {ownerName && !loading && !error && reports.length === 0 && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          No attendance reports found for "{ownerName}".
+          <Button size="small" sx={{ ml: 2 }} onClick={() => { localStorage.removeItem('meetingOwnerName'); setOwnerName(''); }}>Use a different name</Button>
+        </Alert>
+      )}
+
+      {!loading && reports.length > 0 && (
         <Box>
           <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
             Showing {reports.length} meeting report{reports.length !== 1 ? 's' : ''}
@@ -153,31 +144,13 @@ export default function AttendanceHistory() {
                           Duration: {formatDate(report.startTime)} - {formatDate(report.endTime)}
                         </Typography>
                       )}
-                      
                       <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
-                        <Chip 
-                          label={`${summary.present} Present`} 
-                          color="success" 
-                          size="small" 
-                        />
-                        <Chip 
-                          label={`${summary.partial} Partial`} 
-                          color="warning" 
-                          size="small" 
-                        />
-                        <Chip 
-                          label={`${summary.absent} Absent`} 
-                          color="error" 
-                          size="small" 
-                        />
-                        <Chip 
-                          label={`${summary.total} Total`} 
-                          variant="outlined" 
-                          size="small" 
-                        />
+                        <Chip label={`${summary.present} Present`} color="success" size="small" />
+                        <Chip label={`${summary.partial} Partial`} color="warning" size="small" />
+                        <Chip label={`${summary.absent} Absent`} color="error" size="small" />
+                        <Chip label={`${summary.total} Total`} variant="outlined" size="small" />
                       </Box>
                     </Box>
-                    
                     <IconButton onClick={() => toggleExpand(report._id)}>
                       {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                     </IconButton>
@@ -203,41 +176,22 @@ export default function AttendanceHistory() {
                             {report.participants.map((participant, idx) => (
                               <TableRow key={idx}>
                                 <TableCell>{participant.name}</TableCell>
+                                <TableCell align="center">{participant.verifiedPercent}%</TableCell>
+                                <TableCell align="center">{participant.totalTime || 'N/A'}</TableCell>
+                                <TableCell align="center">{participant.verifiedTime || 'N/A'}</TableCell>
                                 <TableCell align="center">
-                                  {participant.verifiedPercent}%
-                                </TableCell>
-                                <TableCell align="center">
-                                  {participant.totalTime || 'N/A'}
-                                </TableCell>
-                                <TableCell align="center">
-                                  {participant.verifiedTime || 'N/A'}
-                                </TableCell>
-                                <TableCell align="center">
-                                  <Chip 
-                                    label={participant.status} 
-                                    color={getStatusColor(participant.status)}
-                                    size="small"
-                                  />
+                                  <Chip label={participant.status} color={getStatusColor(participant.status)} size="small" />
                                 </TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
                         </Table>
                       </TableContainer>
-                      
                       <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                          Attendance Criteria:
-                        </Typography>
-                        <Typography variant="body2" sx={{ mb: 0.5 }}>
-                          ✅ <strong>Present:</strong> Face detected ≥ 75% of time
-                        </Typography>
-                        <Typography variant="body2" sx={{ mb: 0.5 }}>
-                          ⚠️ <strong>Partial:</strong> Face detected ≥ 50% but &lt; 75% of time
-                        </Typography>
-                        <Typography variant="body2">
-                          ❌ <strong>Absent:</strong> Face detected &lt; 50% of time
-                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>Attendance Criteria:</Typography>
+                        <Typography variant="body2" sx={{ mb: 0.5 }}>✅ <strong>Present:</strong> Face detected ≥ 75% of time</Typography>
+                        <Typography variant="body2" sx={{ mb: 0.5 }}>⚠️ <strong>Partial:</strong> Face detected ≥ 50% but &lt; 75% of time</Typography>
+                        <Typography variant="body2">❌ <strong>Absent:</strong> Face detected &lt; 50% of time</Typography>
                       </Box>
                     </Box>
                   </Collapse>

@@ -22,6 +22,7 @@ import VideoMeetComponent from './pages/VideoMeet';
 import HomeComponent from './pages/home';
 import History from './pages/history';
 import AttendanceHistory from './pages/AttendanceHistory';
+import AttendanceAnalytics from './pages/AttendanceAnalytics';
 
 function App() {
   return (
@@ -47,6 +48,7 @@ function App() {
             
             {/* Attendance history page (requires login) */}
             <Route path='/attendance-history' element={<AttendanceHistory />} />
+            <Route path='/attendance-analytics' element={<AttendanceAnalytics />} />
             
             {/* Video meeting room - :url is the meeting code */}
             <Route path='/:url' element={<VideoMeetComponent />} />
