@@ -13,6 +13,7 @@
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
     "@vladmandic/face-api": "^1.7.15",
+    "@xenova/transformers": "^2.17.2",
     "ajv": "^8.20.0",
     "axios": "^1.6.5",
     "http-status": "^1.7.3",

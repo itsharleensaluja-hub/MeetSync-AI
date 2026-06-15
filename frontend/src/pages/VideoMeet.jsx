@@ -37,6 +37,11 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import SearchIcon from '@mui/icons-material/Search';
 import SentimentSatisfiedIcon from '@mui/icons-material/SentimentSatisfied';
 import PanToolIcon from '@mui/icons-material/PanTool';
+import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
+import StopIcon from '@mui/icons-material/Stop';
+
+import { RecordingProvider, useRecording } from '../contexts/RecordingContext';
+import RecordingControls from '../components/RecordingControls';
 
 import server from '../environment';
 
@@ -142,11 +147,17 @@ export default function VideoMeetComponent() {
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [generatingSummary, setGeneratingSummary] = useState(false);
   const [transcriptError, setTranscriptError] = useState('');
+  const [transcriptLoading, setTranscriptLoading] = useState('');
   const [manualTranscriptText, setManualTranscriptText] = useState('');
   const mediaRecorderRef = useRef(null);
   const isRecordingRef = useRef(false);
   const flushTimerRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const recognitionRef = useRef(null);
+  const transformersPipelineRef = useRef(null);
+  const speechStreamRef = useRef(null);
+  const speechWatchdogRef = useRef(null);
+  const permissionsPromiseRef = useRef(null);
 
   // Ensure local video element gets srcObject whenever video is on
   useEffect(() => {
@@ -434,6 +445,7 @@ const enrollFace = async () => {
       console.log('🎤 Audio tracks:', stream.getAudioTracks().map(t => ({ label: t.label, enabled: t.enabled })));
       console.log('🎥 Video tracks:', stream.getVideoTracks().map(t => ({ label: t.label, enabled: t.enabled })));
       console.log('🔊 window.localStream set with', stream.getAudioTracks().length, 'audio tracks');
+      attachLocalStreamToExistingConnections();
       if (navigator.mediaDevices.getDisplayMedia) setScreenAvailable(true);
     } catch (err) {
       try {
@@ -454,20 +466,51 @@ const enrollFace = async () => {
   };
 
   useEffect(() => {
-    getPermissions();
+    permissionsPromiseRef.current = getPermissions();
   }, []);
 
   // debug: get media when joining from lobby
-  const getMedia = () => {
-    console.log('📡 Connecting to socket server...');
-    console.log('🎤 window.localStream exists:', !!window.localStream);
-    if (window.localStream) {
-      console.log('🎤 Audio tracks in localStream:', window.localStream.getAudioTracks().length);
-      window.localStream.getAudioTracks().forEach(track => {
-        console.log('🎤 Track:', track.label, '- Enabled:', track.enabled, '- ReadyState:', track.readyState);
-      });
+  const getMedia = async () => {
+    console.log('📡 Waiting for media permissions...');
+    if (permissionsPromiseRef.current) {
+      await permissionsPromiseRef.current;
     }
+    if (!window.localStream) {
+      console.error('❌ Media permissions denied. Cannot join meeting.');
+      return;
+    }
+    console.log('✅ Media ready. Connecting to socket server...');
+    console.log('🎤 Audio tracks:', window.localStream.getAudioTracks().length);
     connectToSocketServer();
+  };
+
+  const attachLocalStreamToExistingConnections = () => {
+    if (!window.localStream) return;
+    for (let id in connections) {
+      if (id === socketIdRef.current) continue;
+      const senders = connections[id].getSenders();
+      const hasAudio = senders.some(s => s.track?.kind === 'audio');
+      const hasVideo = senders.some(s => s.track?.kind === 'video');
+      if (hasAudio && hasVideo) continue;
+      console.log(`🔗 Attaching late local tracks to ${id}`);
+      window.localStream.getTracks().forEach(track => {
+        const kind = track.kind;
+        const existing = senders.find(s => s.track?.kind === kind);
+        if (existing) {
+          existing.replaceTrack(track);
+        } else {
+          connections[id].addTrack(track, window.localStream);
+        }
+      });
+      if (connections[id].signalingState === 'stable') {
+        connections[id].createOffer()
+          .then(d => connections[id].setLocalDescription(d))
+          .then(() => {
+            socketRef.current.emit('signal', id, JSON.stringify({ sdp: connections[id].localDescription }));
+          })
+          .catch(err => console.error('Error renegotiating after late track attach:', err));
+      }
+    }
   };
 
   const getUserMedia = () => {
@@ -1066,95 +1109,215 @@ const enrollFace = async () => {
 
   // ============= TRANSCRIPTION FUNCTIONS =============
 
-  const startTranscription = () => {
+  const startWebSpeech = async () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return false;
+
+    // Web Speech API accesses the mic internally — no separate getUserMedia needed.
+    // Using window.localStream directly avoids driver contention from two concurrent audio streams.
+    speechStreamRef.current = null;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = transcriptLang;
+
+    recognition.onaudiostart = () => console.log('🎤 Web Speech: audio started');
+    recognition.onsoundstart = () => console.log('🎤 Web Speech: sound detected');
+    recognition.onspeechstart = () => console.log('🎤 Web Speech: speech detected');
+    recognition.onnomatch = () => console.log('🎤 Web Speech: no match');
+
+    const rearmWatchdog = () => {
+      clearTimeout(speechWatchdogRef.current);
+      speechWatchdogRef.current = setTimeout(() => {
+        if (isRecordingRef.current && recognitionRef.current === recognition) {
+          console.error('❌ Web Speech: no results for 10s, switching to local model');
+          recognitionRef.current = null;
+          try { recognition.stop(); } catch (e) {}
+          startTransformers();
+        }
+      }, 10000);
+    };
+
+    recognition.onresult = (event) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          const text = result[0].transcript.trim();
+          if (text) {
+            console.log('📝 Web Speech final:', text);
+            const entry = { text, speaker: username || 'Anonymous', lang: 'auto', timestamp: Date.now() };
+            setTranscript(prev => [...prev, entry]);
+            socketRef.current?.emit('transcript-entry', { meetingId: meetingCode, ...entry });
+          }
+        } else {
+          interim += result[0].transcript;
+        }
+      }
+      setInterimText(interim);
+      rearmWatchdog();
+    };
+
+    recognition.onerror = (event) => {
+      console.error('❌ Web Speech error:', event.error);
+      if (event.error === 'no-speech' || event.error === 'aborted') {
+        return;
+      }
+
+      if (event.error === 'network') {
+        console.log('🔁 Web Speech network error — auto-fallback to Transformers.js');
+        clearTimeout(speechWatchdogRef.current);
+        recognitionRef.current = null;
+        startTransformers();
+        return;
+      }
+
+      setTranscriptError('Speech recognition error: ' + event.error + '. Try manual entry below.');
+      setIsRecording(false);
+      isRecordingRef.current = false;
+    };
+
+    recognition.onend = () => {
+      console.log('🎤 Web Speech: ended');
+      if (recognitionRef.current !== recognition) {
+        console.log('🛑 Web Speech: ignoring stale instance onend');
+        return;
+      }
+      if (isRecordingRef.current) {
+        try {
+          recognition.start();
+          console.log('🎤 Web Speech: restarted');
+          rearmWatchdog();
+        } catch (e) {
+          console.error('❌ Web Speech restart failed:', e.message);
+        }
+      }
+    };
+
+    try {
+      recognition.start();
+      console.log('🎤 Web Speech: started');
+    } catch (e) {
+      console.error('❌ Web Speech start failed:', e.message);
+      return false;
+    }
+
+    rearmWatchdog();
+    recognitionRef.current = recognition;
+    return true;
+  };
+
+  const startTransformers = async () => {
     setTranscriptError('');
     if (!window.localStream || !window.localStream.getAudioTracks().length) {
-      setTranscriptError('No microphone detected. Join the meeting first.');
+      setTranscriptError('No microphone detected. Try manual entry below.');
+      setIsRecording(false);
+      isRecordingRef.current = false;
       return;
     }
 
+    try {
+      setTranscriptLoading('Loading speech model (~70MB)...');
+
+      const { pipeline } = await import('@xenova/transformers');
+
+      if (!transformersPipelineRef.current) {
+        transformersPipelineRef.current = await pipeline(
+          'automatic-speech-recognition',
+          'Xenova/whisper-tiny.en',
+          { quantized: true }
+        );
+      }
+
+      setTranscriptLoading('');
+
+      const pipe = transformersPipelineRef.current;
+
+      const recorder = new MediaRecorder(window.localStream);
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.onerror = () => {
+        setTranscriptError('Audio recording error occurred.');
+        setIsRecording(false);
+        isRecordingRef.current = false;
+        clearInterval(flushTimerRef.current);
+      };
+
+      recorder.start();
+
+      flushTimerRef.current = setInterval(async () => {
+        recorder.requestData();
+        if (audioChunksRef.current.length === 0) return;
+        const batch = audioChunksRef.current.splice(0);
+        const blob = new Blob(batch, { type: recorder.mimeType });
+
+        try {
+          const arrayBuffer = await blob.arrayBuffer();
+          const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+          const audioData = audioBuffer.getChannelData(0);
+
+          const result = await pipe(audioData);
+          if (result?.text?.trim()) {
+            const text = result.text.trim();
+            const entry = { text, speaker: username || 'Anonymous', lang: 'auto', timestamp: Date.now() };
+            setTranscript(prev => [...prev, entry]);
+            socketRef.current?.emit('transcript-entry', { meetingId: meetingCode, ...entry });
+          }
+        } catch (err) {
+          console.error('Transformers transcription error:', err);
+        }
+      }, 5000);
+    } catch (err) {
+      console.error('❌ Transformers pipeline error:', err);
+      setTranscriptLoading('');
+      setTranscriptError('Failed to load speech model. Try manual entry below.');
+      setIsRecording(false);
+      isRecordingRef.current = false;
+    }
+  };
+
+  const startTranscription = async () => {
+    setTranscriptError('');
     setIsRecording(true);
     isRecordingRef.current = true;
-    audioChunksRef.current = [];
 
-    let mediaRecorder;
-    try {
-      mediaRecorder = new MediaRecorder(window.localStream);
-    } catch (e) {
-      setTranscriptError('Audio recording not supported in this browser.');
-      setIsRecording(false);
-      isRecordingRef.current = false;
+    const webSpeechStarted = await startWebSpeech();
+    if (webSpeechStarted) {
+      console.log('🎤 Using Web Speech API (Chrome/Edge)');
       return;
     }
 
-    mediaRecorderRef.current = mediaRecorder;
-
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) audioChunksRef.current.push(e.data);
-    };
-
-    mediaRecorder.onerror = () => {
-      setTranscriptError('Audio recording error occurred.');
-      setIsRecording(false);
-      isRecordingRef.current = false;
-      clearInterval(flushTimerRef.current);
-    };
-
-    try {
-      mediaRecorder.start();
-    } catch (e) {
-      setTranscriptError('Could not start audio recording. Try manual entry below.');
-      setIsRecording(false);
-      isRecordingRef.current = false;
-      return;
-    }
-
-    // Flush audio chunks to backend Whisper every 5 seconds
-    flushTimerRef.current = setInterval(async () => {
-      mediaRecorder.requestData();
-      if (audioChunksRef.current.length === 0) return;
-      const batch = audioChunksRef.current.splice(0);
-      const blob = new Blob(batch, { type: mediaRecorder.mimeType });
-
-      console.log(`📊 Audio blob: ${(blob.size / 1024).toFixed(1)}KB, type: ${blob.type}, chunks: ${batch.length}`);
-
-      try {
-        const formData = new FormData();
-        formData.append('audio', blob, `audio-${Date.now()}.webm`);
-        const res = await fetch(`${server}/api/transcribe`, { method: 'POST', body: formData });
-        if (!res.ok) {
-          if (res.status === 503) {
-            setTranscriptError('OpenAI API key not configured. Use manual entry below.');
-            stopTranscription();
-          } else {
-            // Try to read the error body from backend
-            const errorBody = await res.text();
-            let errorMsg = `Transcription failed (${res.status})`;
-            try {
-              const parsed = JSON.parse(errorBody);
-              if (parsed.error) errorMsg = parsed.error;
-            } catch (e) {}
-            console.error('❌ Transcribe error:', errorMsg);
-            setTranscriptError(errorMsg + '. Try manual entry below.');
-            stopTranscription();
-          }
-          return;
-        }
-        const data = await res.json();
-        if (data.text && data.text.trim()) {
-          const entry = { text: data.text.trim(), speaker: username || 'Anonymous', lang: 'auto', timestamp: Date.now() };
-          setTranscript(prev => [...prev, entry]);
-          socketRef.current?.emit('transcript-entry', { meetingId: meetingCode, ...entry });
-        }
-      } catch (err) {
-        console.error('Flush error:', err);
-      }
-    }, 5000);
+    console.log('🎤 Using Transformers.js (Firefox/Safari)');
+    startTransformers();
   };
 
   const stopTranscription = () => {
     setIsRecording(false);
     isRecordingRef.current = false;
+    setInterimText('');
+
+    if (speechWatchdogRef.current) {
+      clearTimeout(speechWatchdogRef.current);
+      speechWatchdogRef.current = null;
+    }
+
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (e) {}
+      recognitionRef.current = null;
+    }
+
+    if (speechStreamRef.current) {
+      speechStreamRef.current.getTracks().forEach(t => t.stop());
+      speechStreamRef.current = null;
+    }
+
     clearInterval(flushTimerRef.current);
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.requestData();
@@ -1396,9 +1559,9 @@ const handleVideo = async () => {
     // They will be stopped when modal is closed
   };
 
-  const connect = () => {
+  const connect = async () => {
     setAskForUsername(false);
-    getMedia();
+    await getMedia();
   };
 
   const handleTabChange = (tab) => {
@@ -1451,6 +1614,19 @@ const handleVideo = async () => {
       default: return '❓';
     }
   };
+
+  function TopNavRecordingIndicator() {
+    const r = useRecording();
+    if (!r.isRecording) return null;
+    const m = String(Math.floor(r.recordingDuration / 60)).padStart(2, '0');
+    const s = String(r.recordingDuration % 60).padStart(2, '0');
+    return (
+      <div className={styles.recordingIndicator}>
+        <span className={styles.recordingDot} />
+        <span className={styles.recordingTimer}>REC {m}:{s}</span>
+      </div>
+    );
+  }
 
   const participantCount = 1 + videos.length;
   const gridCols = participantCount <= 1 ? 1
@@ -1523,6 +1699,7 @@ const handleVideo = async () => {
           </main>
         </div>
       ) : (
+        <RecordingProvider>
         <div className={styles.meetVideoContainer}>
           {/* TOP NAV */}
           <header className={styles.topNav}>
@@ -1535,6 +1712,7 @@ const handleVideo = async () => {
               <span className={styles.navSubtitle}>Live Room</span>
             </div>
             <div className={styles.topNavRight}>
+              <TopNavRecordingIndicator />
               <div className={styles.avatarStack}>
                 {videos.slice(0, 2).map(v => (
                   <div key={v.socketId} className={styles.avatarImg} style={{ background: '#645efb', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '12px', fontWeight: 700 }}>
@@ -1845,6 +2023,11 @@ const handleVideo = async () => {
                         <option value="ru-RU">Русский</option>
                       </select>
                     </div>
+                    {transcriptLoading && (
+                      <div style={{ background: '#fff3cd', color: '#856404', padding: '8px 10px', borderRadius: 8, fontSize: 12, marginBottom: 4 }}>
+                        {transcriptLoading}
+                      </div>
+                    )}
                     {transcriptError && (
                       <div style={{ background: '#fdecea', color: '#b71c1c', padding: '8px 10px', borderRadius: 8, fontSize: 12, marginBottom: 4 }}>
                         {transcriptError}
@@ -2018,6 +2201,7 @@ const handleVideo = async () => {
               <button onClick={toggleHandRaise} className={`${styles.controlButton} ${handRaised ? styles.controlActive : ''}`} title={handRaised ? "Lower Hand" : "Raise Hand"}>
                 <PanToolIcon />
               </button>
+              <RecordingControls isOwner={isMeetingOwner} meetingCode={meetingCode} />
               <button onClick={handleEndCall} className={styles.leaveButton} title={isMeetingOwner ? "End Meeting & Generate Report" : "Leave Meeting"}>
                 <CallEndIcon />
                 <span>Leave</span>
@@ -2038,6 +2222,7 @@ const handleVideo = async () => {
             </div>
           </footer>
         </div>
+        </RecordingProvider>
       )}
 
       {/* ENROLLMENT MODAL */}
