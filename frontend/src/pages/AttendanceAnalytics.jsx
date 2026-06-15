@@ -5,7 +5,7 @@ import {
   CircularProgress, Alert, Button, Grid, TextField
 } from '@mui/material';
 import {
-  PieChart, Pie, Cell, Tooltip, Legend, BarChart, Bar, XAxis, YAxis,
+  PieChart, Pie, Cell, Tooltip, Legend, XAxis, YAxis,
   CartesianGrid, ResponsiveContainer, LineChart, Line
 } from 'recharts';
 import server from '../environment';
@@ -102,6 +102,7 @@ export default function AttendanceAnalytics() {
 
     lineData.push({
       date: dateStr,
+      meetingLabel: shortId,
       avgPercent: meetingAvg,
       participants: participants.length
     });
@@ -249,32 +250,6 @@ export default function AttendanceAnalytics() {
               </Card>
             </Grid>
           </Grid>
-
-          {/* Per-Meeting Bar Chart */}
-          <Card sx={{ mb: 4 }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>Per-Meeting Attendance</Typography>
-              <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={barData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} />
-                  <Tooltip
-                    formatter={(value, name, props) => {
-                      if (name === 'avgPercent') return [`${value}%`, 'Avg Attendance'];
-                      return [value, name];
-                    }}
-                    labelFormatter={(label, payload) => {
-                      if (payload && payload[0]) return `Meeting: ${payload[0].payload.meetingId}`;
-                      return label;
-                    }}
-                  />
-                  <Legend />
-                  <Bar dataKey="avgPercent" name="Avg Attendance %" fill="#1565c0" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
 
           {/* Detailed Table */}
           <Card>
