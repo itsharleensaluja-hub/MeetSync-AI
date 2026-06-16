@@ -10,6 +10,7 @@
 
 import { Face } from "../models/face.model.js";
 import { Attendance } from "../models/attendance.model.js";
+import ActionItem from "../models/actionItem.model.js";
 
 import { Server } from "socket.io";
 import OpenAI from "openai";
@@ -141,6 +142,26 @@ function extractSummary(entries) {
         .map(([text]) => text.charAt(0).toUpperCase() + text.slice(1));
 
     return { executiveSummary: overview, keyDiscussionPoints: keyTopics, decisionsTaken: decisions, actionItems, risks: [], nextSteps: [] };
+}
+
+async function saveActionItems(meetingId, summary) {
+    if (summary.actionItems && summary.actionItems.length > 0) {
+        try {
+            const docs = summary.actionItems
+                .filter(t => t && t.trim())
+                .map(task => ({
+                    meetingId,
+                    task: task.trim(),
+                    status: 'pending'
+                }));
+            if (docs.length > 0) {
+                await ActionItem.insertMany(docs);
+                console.log(`✅ Saved ${docs.length} action items for meeting ${meetingId}`);
+            }
+        } catch (err) {
+            console.error('Failed to save action items:', err.message);
+        }
+    }
 }
 
 export const connectToSocket = (server) => {
@@ -614,6 +635,7 @@ If any field has no items, return an empty array for that field. Transcript:`
                     const summary = JSON.parse(response.choices[0].message.content);
                     io.to(meetingId).emit("summary-generated", summary);
                     console.log(`📋 GPT summary generated for ${meetingId}: ${summary.executiveSummary?.substring(0, 80)}...`);
+                    await saveActionItems(meetingId, summary);
                     return;
                 } catch (err) {
                     console.error('GPT summary error, falling back to keyword extraction:', err.message);
@@ -623,6 +645,31 @@ If any field has no items, return an empty array for that field. Transcript:`
             const summary = extractSummary(transcriptEntries);
             io.to(meetingId).emit("summary-generated", summary);
             console.log(`📋 Keyword summary generated for ${meetingId}: ${summary.executiveSummary?.substring(0, 80)}...`);
+            await saveActionItems(meetingId, summary);
+        });
+
+        // Fetch action items for a meeting
+        socket.on("get-action-items", async ({ meetingId }) => {
+            try {
+                const items = await ActionItem.find({ meetingId }).sort({ createdAt: -1 });
+                socket.emit("action-items-list", items);
+            } catch (err) {
+                console.error('Failed to fetch action items:', err.message);
+                socket.emit("action-items-list", []);
+            }
+        });
+
+        // Toggle action item completion status
+        socket.on("toggle-action-item", async ({ id, meetingId }) => {
+            try {
+                const item = await ActionItem.findById(id);
+                if (!item) return;
+                item.status = item.status === 'pending' ? 'completed' : 'pending';
+                await item.save();
+                io.to(meetingId).emit("action-item-updated", item);
+            } catch (err) {
+                console.error('Failed to toggle action item:', err.message);
+            }
         });
 
         // ==================== END NEW EVENTS ====================

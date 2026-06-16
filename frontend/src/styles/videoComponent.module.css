@@ -70,6 +70,51 @@
   gap: 16px;
 }
 
+.participantsToggleBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: #1e2640;
+  color: #c3c0ff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  position: relative;
+}
+
+.participantsToggleBtn:hover {
+  background: #2a3360;
+}
+
+.participantsToggleActive {
+  background: #645efb;
+  color: white;
+}
+
+.participantsToggleActive:hover {
+  background: #7c76ff;
+}
+
+.participantsToggleBadge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  background: #eb3b5a;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
 .avatarStack {
   display: flex;
   align-items: center;
@@ -490,22 +535,6 @@
   font-size: 14px;
   font-weight: 600;
   color: #191c1e;
-}
-
-.participantsPanel {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 0 4px;
-}
-
-.participantsHeader {
-  padding: 12px;
-  font-size: 13px;
-  font-weight: 700;
-  color: #45464d;
-  border-bottom: 1px solid #c6c6cd;
-  margin-bottom: 8px;
 }
 
 .participantRow {
@@ -1700,6 +1729,57 @@
 
 .joinRequestRejectBtn:hover {
   background: rgba(244, 67, 54, 0.3);
+}
+
+.actionItemCard {
+  background: #f8f9fc;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  border: 1px solid #e8eaf0;
+}
+
+.actionItemCheckbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #191c1e;
+  line-height: 1.5;
+}
+
+.actionItemCheckbox input[type="checkbox"] {
+  margin-top: 2px;
+  accent-color: #645efb;
+  flex-shrink: 0;
+}
+
+.actionItemDone {
+  text-decoration: line-through;
+  color: #8a8fa8;
+}
+
+.actionItemMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  margin-left: 24px;
+}
+
+.actionItemAssignee {
+  font-size: 11px;
+  color: #645efb;
+  font-weight: 600;
+  background: rgba(100, 94, 251, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.actionItemDate {
+  font-size: 11px;
+  color: #8a8fa8;
 }
 
 

@@ -39,6 +39,8 @@ import SearchIcon from '@mui/icons-material/Search';
 import SentimentSatisfiedIcon from '@mui/icons-material/SentimentSatisfied';
 import PanToolIcon from '@mui/icons-material/PanTool';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import ChecklistIcon from '@mui/icons-material/Checklist';
+import PeopleIcon from '@mui/icons-material/People';
 import server from '../environment';
 
 const server_url = server;
@@ -123,6 +125,7 @@ export default function VideoMeetComponent() {
   const [liveAttendance, setLiveAttendance] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('chat');
+  const [lastNonParticipantsTab, setLastNonParticipantsTab] = useState('chat');
   
   // Polls & Decisions state
   const [polls, setPolls] = useState([]);
@@ -155,6 +158,7 @@ export default function VideoMeetComponent() {
   const [transcriptError, setTranscriptError] = useState('');
   const [transcriptLoading, setTranscriptLoading] = useState('');
   const [manualTranscriptText, setManualTranscriptText] = useState('');
+  const [actionItems, setActionItems] = useState([]);
   const mediaRecorderRef = useRef(null);
   const isRecordingRef = useRef(false);
   const flushTimerRef = useRef(null);
@@ -970,6 +974,15 @@ const enrollFace = async () => {
         setAiSummary(summary);
         setGeneratingSummary(false);
         setShowSummaryModal(true);
+        socketRef.current?.emit('get-action-items', { meetingId: meetingCode });
+      });
+
+      socketRef.current.on('action-items-list', (items) => {
+        setActionItems(items || []);
+      });
+
+      socketRef.current.on('action-item-updated', (item) => {
+        setActionItems(prev => prev.map(a => a._id === item._id ? item : a));
       });
 
       socketRef.current.on('hand-raise-update', (users) => {
@@ -1434,6 +1447,14 @@ const enrollFace = async () => {
     });
   };
 
+  const toggleActionItem = (id) => {
+    socketRef.current?.emit('toggle-action-item', { id, meetingId: meetingCode });
+  };
+
+  const refreshActionItems = () => {
+    socketRef.current?.emit('get-action-items', { meetingId: meetingCode });
+  };
+
   // ============= END TRANSCRIPTION =============
 
   const addPollOption = () => {
@@ -1683,11 +1704,22 @@ const enrollFace = async () => {
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
+    if (tab !== 'participants') setLastNonParticipantsTab(tab);
     if (tab === 'chat') setNewMessages(0);
   };
 
   const toggleSidebar = () => {
     setSidebarOpen(prev => !prev);
+  };
+
+  const toggleParticipants = () => {
+    if (activeTab === 'participants') {
+      setActiveTab(lastNonParticipantsTab);
+    } else {
+      setLastNonParticipantsTab(activeTab);
+      setActiveTab('participants');
+      setSidebarOpen(true);
+    }
   };
 
   const sendReaction = (emoji) => {
@@ -1872,8 +1904,8 @@ const enrollFace = async () => {
               <div className={styles.navDivider}></div>
               <span className={styles.navSubtitle}>Live Room</span>
             </div>
-            {videos.filter(v => v.userName).length > 0 && (
-              <div className={styles.topNavRight}>
+            <div className={styles.topNavRight}>
+              {videos.filter(v => v.userName).length > 0 && (
                 <div className={styles.avatarStack}>
                   {videos.filter(v => v.userName).slice(0, 2).map(v => (
                     <div key={v.socketId} className={styles.avatarImg} style={{ background: '#645efb', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '12px', fontWeight: 700 }}>
@@ -1884,8 +1916,14 @@ const enrollFace = async () => {
                     <div className={styles.avatarCount}>+{videos.filter(v => v.userName).length - 2}</div>
                   )}
                 </div>
-              </div>
-            )}
+              )}
+              <button onClick={toggleParticipants} className={`${styles.participantsToggleBtn} ${activeTab === 'participants' ? styles.participantsToggleActive : ''}`} title="Participants">
+                <PeopleIcon sx={{ fontSize: 20 }} />
+                {participantList.length > 0 && (
+                  <span className={styles.participantsToggleBadge}>{participantList.length}</span>
+                )}
+              </button>
+            </div>
           </header>
 
           {/* Join requests banner for meeting owner */}
@@ -1999,11 +2037,12 @@ const enrollFace = async () => {
                 <button onClick={() => handleTabChange('transcript')} className={`${styles.tabButton} ${activeTab === 'transcript' ? styles.tabActive : ''}`}>
                   Transcript
                 </button>
-                <button onClick={() => handleTabChange('participants')} className={`${styles.tabButton} ${activeTab === 'participants' ? styles.tabActive : ''}`}>
-                  Participants {raisedHandUsers.length > 0 && <span className={styles.handBadge}>{raisedHandUsers.length}</span>}
-                </button>
                 <button onClick={() => handleTabChange('info')} className={`${styles.tabButton} ${activeTab === 'info' ? styles.tabActive : ''}`}>
                   Info
+                </button>
+                <button onClick={() => { handleTabChange('actionItems'); refreshActionItems(); }} className={`${styles.tabButton} ${activeTab === 'actionItems' ? styles.tabActive : ''}`}>
+                  <ChecklistIcon sx={{ fontSize: 16, verticalAlign: 'middle', mr: 0.5 }} />
+                  Tasks {actionItems.filter(a => a.status === 'pending').length > 0 && <span className={styles.handBadge}>{actionItems.filter(a => a.status === 'pending').length}</span>}
                 </button>
               </nav>
 
@@ -2281,35 +2320,6 @@ const enrollFace = async () => {
                   </div>
                 )}
 
-                {/* TAB 4: PARTICIPANTS */}
-                {activeTab === 'participants' && (
-                  <div className={styles.participantsPanel}>
-                    <div className={styles.participantsHeader}>
-                      <span>{participantList.length} Participant{participantList.length !== 1 ? 's' : ''}</span>
-                    </div>
-                    {participantList.map(p => {
-                      const isLocal = p.userId === uniqueUserId;
-                      return (
-                        <div key={p.socketId || p.userId} className={styles.participantRow}>
-                          <div className={styles.participantAvatar}>
-                            {(p.userName || '?')[0].toUpperCase()}
-                          </div>
-                          <div className={styles.participantInfo}>
-                            <span className={styles.participantName}>
-                              {p.userName || 'Anonymous'}
-                              {isLocal && <span className={styles.participantYou}>(You)</span>}
-                            </span>
-                          </div>
-                          {p.hasRaisedHand && <span className={styles.participantHandIcon}>✋</span>}
-                        </div>
-                      );
-                    })}
-                    {participantList.length === 0 && (
-                      <div className={styles.participantsEmpty}>No participants yet</div>
-                    )}
-                  </div>
-                )}
-
                 {/* TAB 5: INFO */}
                 {activeTab === 'info' && (
                   <div className={styles.infoPanel}>
@@ -2357,6 +2367,79 @@ const enrollFace = async () => {
                         <li>Attendance is based on face detection percentage</li>
                       </ul>
                     </div>
+                  </div>
+                )}
+
+                {/* TAB 6: ACTION ITEMS */}
+                {activeTab === 'actionItems' && (
+                  <div className={styles.attendancePanel}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', marginBottom: 12 }}>
+                      <span style={{ fontWeight: 700, fontSize: 14, color: '#191c1e' }}>
+                        Action Items ({actionItems.length})
+                      </span>
+                      <button onClick={refreshActionItems} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#645efb', fontSize: 12, fontWeight: 600 }}>
+                        Refresh
+                      </button>
+                    </div>
+                    {actionItems.length === 0 ? (
+                      <p style={{ color: '#8a8fa8', textAlign: 'center', padding: '32px 16px', fontSize: 13 }}>
+                        No action items yet. Generate an AI summary from the Transcript tab to extract action items.
+                      </p>
+                    ) : (
+                      actionItems.map(item => (
+                        <div key={item._id} className={styles.actionItemCard}>
+                          <label className={styles.actionItemCheckbox}>
+                            <input
+                              type="checkbox"
+                              checked={item.status === 'completed'}
+                              onChange={() => toggleActionItem(item._id)}
+                            />
+                            <span className={item.status === 'completed' ? styles.actionItemDone : ''}>
+                              {item.task}
+                            </span>
+                          </label>
+                          <div className={styles.actionItemMeta}>
+                            {item.assignedTo !== 'Unassigned' && (
+                              <span className={styles.actionItemAssignee}>{item.assignedTo}</span>
+                            )}
+                            <span className={styles.actionItemDate}>
+                              {new Date(item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 7: PARTICIPANTS */}
+                {activeTab === 'participants' && (
+                  <div className={styles.attendancePanel}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', marginBottom: 8 }}>
+                      <span style={{ fontWeight: 700, fontSize: 14, color: '#191c1e' }}>
+                        {participantList.length} Participant{participantList.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    {participantList.map(p => {
+                      const isLocal = p.userId === uniqueUserId;
+                      return (
+                        <div key={p.socketId || p.userId} className={styles.participantRow}>
+                          <div className={styles.participantAvatar}>
+                            {(p.userName || '?')[0].toUpperCase()}
+                          </div>
+                          <div className={styles.participantInfo}>
+                            <span className={styles.participantName}>
+                              {p.userName || 'Anonymous'}
+                              {isLocal && <span className={styles.participantYou}>(You)</span>}
+                            </span>
+                          </div>
+                          {p.hasRaisedHand && <span className={styles.participantHandIcon}>✋</span>}
+                        </div>
+                      );
+                    })}
+                    {participantList.length === 0 && (
+                      <div className={styles.participantsEmpty}>No participants yet</div>
+                    )}
                   </div>
                 )}
               </div>

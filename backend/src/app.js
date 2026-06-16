@@ -23,6 +23,7 @@ import { fileURLToPath } from "url"; // For ES modules __dirname equivalent
 dotenv.config(); // Load environment variables from .env file
 import userRoutes from "./routes/users.routes.js"; // User authentication routes
 import attendanceRoutes from "./routes/attendance.routes.js"; // Attendance report routes
+import actionItemRoutes from "./routes/actionItem.routes.js"; // Action item routes
 
 // ES modules equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -88,6 +89,7 @@ app.get('/api/health', (req, res) => {
 app.use("/api/v1/users", userRoutes);
 // All attendance-related endpoints (reports, owner reports) are prefixed with /api/v1/attendance
 app.use("/api/v1/attendance", attendanceRoutes);
+app.use("/api/v1/action-items", actionItemRoutes);
 
 // SERVE FRONTEND STATIC FILES IN PRODUCTION
 // This serves the React build files when deployed
