@@ -590,7 +590,7 @@ export const connectToSocket = (server) => {
 
         // Relay live transcript entry to all participants
         socket.on("transcript-entry", ({ meetingId, text, speaker, lang, timestamp }) => {
-            io.to(meetingId).emit("transcript-entry", { text, speaker, lang, timestamp });
+            socket.to(meetingId).emit("transcript-entry", { text, speaker, lang, timestamp });
             console.log(`📝 Transcript [${meetingId}] ${speaker}: ${text.substring(0, 60)}`);
         });
 
