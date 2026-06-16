@@ -1769,6 +1769,7 @@ const enrollFace = async () => {
     : participantCount <= 4 ? 2
     : participantCount <= 9 ? 3
     : 4;
+  const gridRows = Math.ceil(participantCount / gridCols);
 
   return (
     <div>
@@ -1963,7 +1964,7 @@ const enrollFace = async () => {
           <main className={styles.mainContent}>
             {/* VIDEO GRID */}
             <section className={styles.videoGrid}
-              style={{ gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}>
+              style={{ gridTemplateColumns: `repeat(${gridCols}, 1fr)`, gridTemplateRows: `repeat(${gridRows}, 1fr)` }}>
               {/* Local video */}
               <div className={`${styles.videoTile} ${isMeetingOwner ? styles.speakerGlow : ''}`}>
                 <video ref={localVideoref} autoPlay muted playsInline className={styles.videoElement}
