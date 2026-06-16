@@ -1,4 +1,4 @@
-/**
+﻿/**
  * SOCKET MANAGER - socketManager.js
  * This file handles all real-time WebSocket communication for video calls:
  * - User joining/leaving calls
@@ -51,99 +51,140 @@ function extractSummary(entries) {
         return { executiveSummary: 'Not enough transcript data to generate a summary.', keyDiscussionPoints: [], decisionsTaken: [], actionItems: [], risks: [], nextSteps: [] };
     }
 
-    // Combine all text and split into sentences (handles multiple languages)
-    const fullText = entries.map(e => e.text).join(' ');
-    const sentences = fullText
-        .split(/(?<=[.!?।？！。])\s+/)
-        .map(s => s.trim())
-        .filter(s => s.length > 10);
+    const seen = new Set();
+    const unique = [];
+    entries.forEach(e => {
+        const key = (e.text || '').toLowerCase().slice(0, 60);
+        if (!seen.has(key)) { seen.add(key); unique.push({ speaker: e.speaker || 'Speaker', text: e.text, ts: e.timestamp || 0 }); }
+    });
 
-    if (sentences.length === 0) {
-        return { executiveSummary: 'Not enough transcript data to generate a summary.', keyDiscussionPoints: [], decisionsTaken: [], actionItems: [], risks: [], nextSteps: [] };
+    if (unique.length === 0) {
+        return { executiveSummary: 'All transcript entries were duplicates. No unique content to summarize.', keyDiscussionPoints: [], decisionsTaken: [], actionItems: [], risks: [], nextSteps: [] };
     }
 
-    // Multi-language decision detection patterns
-    const decisionPatterns = [
-        /decided|agreed|approved|confirmed|finalized|consensus|voted|we('| a)ll go with|settled on|let's do it|good to go/i,
-        /निर्णय|सहमत|मंजूर|तय/i,
-        /decid[ii]|acord[oó]|aprobad[o]|confirmad[o]/i,
-        /d[cé]cid[ée]|convenu|approuv[ée]/i,
-        /entschieden|vereinbart|zugestimmt|genehmigt/i,
-        /决定|同意|批准|确认|通过/i,
-        /決定|同意|承認/i,
-        /decidiu|acordou|aprovado/i,
-        /решили|согласовали|утвердили/i,
-        /قرر|وافق|تمت\s*الموافقة/i
-    ];
-
-    // Multi-language task/action detection patterns
-    const taskPatterns = [
-        /action\s*item|assigned\s*to|will\s*handle|will\s*take\s*care|task\s*for|responsible\s*for|to[\s-]?do|follow\s*up|need\s*to|will\s*work\s*on|going\s*to|i('| a)m going|plan\s*to/i,
-        /जिम्मेदारी|कार्य|काम/i,
-        /tarea|asignad[o]|responsable/i,
-        /t[âa]che|assign[ée]|responsable/i,
-        /aufgabe|zugewiesen|verantwortlich/i,
-        /任务|分配给|负责|需要|要做的/i,
-        /タスク|担当|責任/i,
-        /tarefa|atribu[ií]d[oa]|respons[áa]vel/i,
-        /задача|назначено|ответственный/i,
-        /مهمة|مسؤول/i
-    ];
-
-    // Score each sentence
-    const wordFreq = {};
-    sentences.forEach(s => {
-        const words = s.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-        words.forEach(w => { wordFreq[w] = (wordFreq[w] || 0) + 1; });
+    const allSentences = [];
+    unique.forEach(e => {
+        (e.text.match(/[^.!?]+[.!?]+/g) || [e.text]).forEach(s => {
+            const t = s.trim();
+            if (t.length > 15) allSentences.push({ text: t, speaker: e.speaker });
+        });
     });
 
-    const scored = sentences.map((s, i) => {
+    if (allSentences.length === 0) {
+        return { executiveSummary: 'No meaningful sentences found in transcript.', keyDiscussionPoints: [], decisionsTaken: [], actionItems: [], risks: [], nextSteps: [] };
+    }
+
+    const stopWords = new Set(['the','a','an','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','shall','can','need','must','to','of','in','for','on','with','at','by','from','as','into','through','during','before','after','above','below','between','out','off','over','under','again','further','then','once','here','there','when','where','why','how','all','each','every','both','few','more','most','other','some','such','no','nor','not','only','own','same','so','than','too','very','just','because','but','and','or','if','while','that','this','these','those','it','its','i','me','my','we','our','you','your','he','him','his','she','her','they','them','their','what','which','who','whom','about','also','well','like','really','actually','basically','okay','yeah','yes','no','oh','uh','um','ah','sort','kind','bit','lot','thing','stuff','maybe','probably','anyway','right','alright','ok','hello','hi','hey','thanks','thank','welcome','please','sure','great','good','nice','quite','pretty']);
+
+    const wordInDocs = {};
+    allSentences.forEach(s => {
+        const words = new Set(s.text.toLowerCase().split(/\s+/).filter(w => w.length > 3 && !stopWords.has(w)));
+        words.forEach(w => { wordInDocs[w] = (wordInDocs[w] || 0) + 1; });
+    });
+
+    const totalSent = allSentences.length;
+    const decisionRe = /\b(decided|agreed|approved|confirmed|finalized|consensus|voted|settled|concluded|resolved|committed|selected|chosen|aligned|on the same page|we('ll| are) going with|let'?s go with|we landed on)\b/i;
+    const taskRe = /\b(will|going to|plan to|need to|has to|must|should|responsible for|assigned to|tasked with|owner|action item|follow up|to-do|todo|take care of|handle|work on|look into|investigate|prepare|create|set up|schedule|send|share|draft|write|update|fix|implement|build|develop|test|deploy|release|submit|review|approve|reach out|coordinate|organize|lead)\b/i;
+    const riskRe = /\b(risk|concern|issue|problem|blocker|challenge|difficulty|worry|caution|caveat|downside|drawback|limitation|constraint|bottleneck|delay|uncertainty|dependenc|open question|open item)\b/i;
+    const contextRe = /\b(discuss|topic|agenda|purpose|goal|objective|present|propose|suggest|recommend|update|progress|status|report)\b/i;
+    const closingRe = /\b(conclude|summary|wrap up|key takeaway|next step|moving forward|going forward|upcoming|follow-up)\b/i;
+    const questionRe = /\?/;
+
+    const scored = allSentences.map((s, i) => {
         let score = 0;
-        // Position bonus (earlier = more important to meeting context)
-        score += Math.max(0, 5 - i * 0.5);
-        // Word frequency bonus (common topics)
-        const words = s.toLowerCase().split(/\s+/);
-        words.forEach(w => { if (wordFreq[w] > 1) score += 0.5; });
-        // Decision keyword bonus
-        const hasDecision = decisionPatterns.some(p => p.test(s));
-        if (hasDecision) score += 3;
-        // Task keyword bonus
-        const hasTask = taskPatterns.some(p => p.test(s));
+        const words = s.text.split(/\s+/);
+        const contentWords = words.filter(w => w.length > 3 && !stopWords.has(w.toLowerCase()));
+        if (i < 3) score += 2;
+        if (i >= totalSent - 2) score += 1.5;
+        contentWords.forEach(w => { const freq = wordInDocs[w.toLowerCase()] || 0; if (freq >= 2) score += 0.3; });
+        if (words.length >= 10 && words.length <= 35) score += 1.5;
+        else if (words.length > 5 && words.length < 50) score += 0.5;
+        if (contextRe.test(s.text)) score += 2;
+        if (closingRe.test(s.text)) score += 2;
+        const hasDecision = decisionRe.test(s.text);
+        if (hasDecision) score += 5;
+        const hasTask = taskRe.test(s.text) && !questionRe.test(s.text);
         if (hasTask) score += 3;
-
-        return { text: s, score, hasDecision, hasTask };
+        if (questionRe.test(s.text)) score -= 2;
+        const hasRisk = riskRe.test(s.text);
+        return { text: s.text, speaker: s.speaker, score, hasDecision, hasTask, hasRisk };
     });
 
-    // Deduplicate and rank
-    const ranked = scored.sort((a, b) => b.score - a.score);
-    const unique = [];
-    const seen = new Set();
-    ranked.forEach(s => {
-        const key = s.text.substring(0, 40);
-        if (!seen.has(key)) { seen.add(key); unique.push(s); }
+    const clusters = [];
+    const assigned = new Set();
+    const sorted = [...scored].sort((a, b) => b.score - a.score);
+    sorted.forEach(s => {
+        if (assigned.has(s.text)) return;
+        const sWords = new Set(s.text.toLowerCase().split(/\s+/).filter(w => w.length > 4 && !stopWords.has(w)));
+        if (sWords.size === 0) { assigned.add(s.text); return; }
+        const cluster = { sentences: [s], words: sWords };
+        assigned.add(s.text);
+        sorted.forEach(s2 => {
+            if (assigned.has(s2.text)) return;
+            const s2Words = new Set(s2.text.toLowerCase().split(/\s+/).filter(w => w.length > 4 && !stopWords.has(w)));
+            const overlap = [...sWords].filter(w => s2Words.has(w)).length;
+            const union = new Set([...sWords, ...s2Words]).size;
+            if (union > 0 && overlap / union > 0.12) {
+                cluster.sentences.push(s2);
+                assigned.add(s2.text);
+                s2Words.forEach(w => sWords.add(w));
+            }
+        });
+        clusters.push(cluster);
     });
-
-    const overview = unique.slice(0, 3).map(s => s.text).join(' ');
-    const decisions = [...new Set(unique.filter(s => s.hasDecision).map(s => s.text))];
-    const actionItems = [...new Set(unique.filter(s => s.hasTask).map(s => s.text))];
-
-    // Extract key topics from recurring bigrams
-    const bigrams = {};
-    sentences.forEach(s => {
-        const words = s.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-        for (let i = 0; i < words.length - 1; i++) {
-            const bg = `${words[i]} ${words[i + 1]}`;
-            bigrams[bg] = (bigrams[bg] || 0) + 1;
+    scored.forEach(s => {
+        if (!assigned.has(s.text)) {
+            const sWords = new Set(s.text.toLowerCase().split(/\s+/).filter(w => w.length > 4 && !stopWords.has(w)));
+            if (sWords.size > 0) { clusters.push({ sentences: [s], words: sWords }); assigned.add(s.text); }
         }
     });
-    const keyTopics = Object.entries(bigrams)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([text]) => text.charAt(0).toUpperCase() + text.slice(1));
 
-    return { executiveSummary: overview, keyDiscussionPoints: keyTopics, decisionsTaken: decisions, actionItems, risks: [], nextSteps: [] };
+    clusters.sort((a, b) => {
+        const aAvg = a.sentences.reduce((sum, s) => sum + s.score, 0) / a.sentences.length;
+        const bAvg = b.sentences.reduce((sum, s) => sum + s.score, 0) / b.sentences.length;
+        return bAvg - aAvg;
+    });
+
+    const topClusterWords = clusters.slice(0, 3).map(c => {
+        const freqWords = [...c.words].filter(w => (wordInDocs[w] || 0) >= 2).sort((a, b) => (wordInDocs[b] || 0) - (wordInDocs[a] || 0)).slice(0, 3);
+        return freqWords.length > 0 ? freqWords.join(', ') : null;
+    }).filter(Boolean);
+
+    const decisionCount = scored.filter(s => s.hasDecision).length;
+    const taskCount = scored.filter(s => s.hasTask).length;
+    const speakerNames = [...new Set(unique.map(e => e.speaker))].filter(Boolean);
+
+    let executiveSummary = '';
+    if (topClusterWords.length > 0) {
+        executiveSummary = 'The meeting covered ' + topClusterWords.join(', ') + '. ';
+    } else {
+        const topSentences = scored.sort((a, b) => b.score - a.score).slice(0, 2);
+        executiveSummary = topSentences.map(s => s.text).join(' ') + ' ';
+    }
+    if (decisionCount > 0) executiveSummary += decisionCount + ' decision' + (decisionCount > 1 ? 's were' : ' was') + ' reached. ';
+    if (taskCount > 0) executiveSummary += taskCount + ' action item' + (taskCount > 1 ? 's were' : ' was') + ' identified. ';
+    if (speakerNames.length > 1) executiveSummary += speakerNames.length + ' participant' + (speakerNames.length > 1 ? 's' : '') + ' contributed (' + speakerNames.join(', ') + ').';
+
+    const keyDiscussionPoints = clusters.slice(0, 5).map(c => c.sentences.sort((a, b) => b.score - a.score)[0].text).filter(Boolean);
+    const decisionsTaken = [...new Set(scored.filter(s => s.hasDecision).sort((a, b) => b.score - a.score).map(s => s.text))].slice(0, 8);
+    const actionItems = [...new Set(scored.filter(s => s.hasTask).sort((a, b) => b.score - a.score).map(s => s.text))].slice(0, 8);
+    const risks = [...new Set(scored.filter(s => s.hasRisk).sort((a, b) => b.score - a.score).map(s => s.text))].slice(0, 5);
+
+    const lastThird = scored.slice(-Math.max(5, Math.ceil(scored.length / 3)));
+    const nextStepSet = new Set();
+    lastThird.filter(s => s.hasTask || closingRe.test(s.text)).forEach(s => nextStepSet.add(s.text));
+    scored.filter(s => s.hasTask).forEach(s => nextStepSet.add(s.text));
+    const nextSteps = [...nextStepSet].slice(0, 5);
+
+    return {
+        executiveSummary: executiveSummary.trim() || 'Meeting transcript processed.',
+        keyDiscussionPoints,
+        decisionsTaken,
+        actionItems,
+        risks,
+        nextSteps
+    };
 }
-
 async function saveActionItems(meetingId, summary) {
     if (summary.actionItems && summary.actionItems.length > 0) {
         try {
@@ -156,7 +197,7 @@ async function saveActionItems(meetingId, summary) {
                 }));
             if (docs.length > 0) {
                 await ActionItem.insertMany(docs);
-                console.log(`✅ Saved ${docs.length} action items for meeting ${meetingId}`);
+                console.log(`âœ… Saved ${docs.length} action items for meeting ${meetingId}`);
             }
         } catch (err) {
             console.error('Failed to save action items:', err.message);
@@ -202,14 +243,14 @@ export const connectToSocket = (server) => {
             if (meetingOwners[path] && connections[path].length > 0) {
                 if (!waitingRoom[path]) waitingRoom[path] = [];
                 waitingRoom[path].push({ socketId: socket.id, userId, userName });
-                console.log(`⏳ User ${userName} (${userId}) added to waiting room for meeting: ${path}`);
+                console.log(`â³ User ${userName} (${userId}) added to waiting room for meeting: ${path}`);
 
                 // Notify the meeting owner
                 const ownerUserId = meetingOwners[path];
                 const ownerUser = connections[path].find(u => u.userId === ownerUserId);
                 if (ownerUser) {
                     io.to(ownerUser.socketId).emit('join-request', { socketId: socket.id, userId, userName });
-                    console.log(`🔔 Join request sent to owner for: ${userName}`);
+                    console.log(`ðŸ”” Join request sent to owner for: ${userName}`);
                 }
 
                 // Tell the user they're waiting for approval
@@ -221,11 +262,11 @@ export const connectToSocket = (server) => {
             if (isOwner && !meetingOwners[path]) {
                 meetingOwners[path] = userId;
                 io.to(socket.id).emit('you-are-owner');
-                console.log(`👑 Meeting owner set: ${userName} (${userId}) for meeting: ${path}`);
+                console.log(`ðŸ‘‘ Meeting owner set: ${userName} (${userId}) for meeting: ${path}`);
             } else if (connections[path].length === 0 && !meetingOwners[path]) {
                 meetingOwners[path] = userId;
                 io.to(socket.id).emit('you-are-owner');
-                console.log(`👑 Meeting owner (first-join fallback): ${userName} (${userId}) for meeting: ${path}`);
+                console.log(`ðŸ‘‘ Meeting owner (first-join fallback): ${userName} (${userId}) for meeting: ${path}`);
             }
 
             // Join the socket to a room with the meeting code
@@ -243,7 +284,7 @@ export const connectToSocket = (server) => {
             // Track when this user joined
             timeOnline[socket.id] = new Date();
 
-            console.log(`✅ User ${userName} (${userId}) joined meeting: ${path}. Total users: ${connections[path].length}`);
+            console.log(`âœ… User ${userName} (${userId}) joined meeting: ${path}. Total users: ${connections[path].length}`);
 
             // Notify all existing users in the room that a new user joined
             for (let a = 0; a < connections[path].length; a++) {
@@ -279,7 +320,7 @@ export const connectToSocket = (server) => {
             // Join the approved socket to the room
             const requesterSocket = io.sockets.sockets.get(requesterSocketId);
             if (!requesterSocket) {
-                console.warn(`⚠️ Cannot approve ${waiter.userName} — socket ${requesterSocketId} is stale/disconnected`);
+                console.warn(`âš ï¸ Cannot approve ${waiter.userName} â€” socket ${requesterSocketId} is stale/disconnected`);
                 return;
             }
             requesterSocket.join(meetingId);
@@ -316,7 +357,7 @@ export const connectToSocket = (server) => {
                 }
             }
 
-            console.log(`✅ ${waiter.userName} approved and joined meeting: ${meetingId}`);
+            console.log(`âœ… ${waiter.userName} approved and joined meeting: ${meetingId}`);
         });
 
         // EVENT: Owner rejects a waiting user
@@ -327,7 +368,7 @@ export const connectToSocket = (server) => {
             if (idx === -1) return;
             waiters.splice(idx, 1);
             io.to(requesterSocketId).emit('join-rejected', { message: 'Host declined your request to join.' });
-            console.log(`❌ Join request rejected for socket: ${requesterSocketId}`);
+            console.log(`âŒ Join request rejected for socket: ${requesterSocketId}`);
         });
 
         // WebRTC signaling
@@ -384,7 +425,7 @@ export const connectToSocket = (server) => {
         socket.on("verified-update", ({ meetingId, userId, userName, verifiedDelta }) => {
             const room = connections[meetingId];
             if (!room) {
-                console.log(`⚠️ No room found for verified-update: ${meetingId}`);
+                console.log(`âš ï¸ No room found for verified-update: ${meetingId}`);
                 return;
             }
 
@@ -393,7 +434,7 @@ export const connectToSocket = (server) => {
                 user.totalTime += 10;
                 user.verifiedTime += verifiedDelta;
                 if (userName) user.userName = userName; // Update userName if provided
-                console.log(`✓ Updated ${user.userName} (${userId}): totalTime=${user.totalTime}s, verifiedTime=${user.verifiedTime}s (delta=${verifiedDelta})`);
+                console.log(`âœ“ Updated ${user.userName} (${userId}): totalTime=${user.totalTime}s, verifiedTime=${user.verifiedTime}s (delta=${verifiedDelta})`);
                 
                 // Send live attendance update to owner
                 const owner = meetingOwners[meetingId];
@@ -411,27 +452,27 @@ export const connectToSocket = (server) => {
                     }
                 }
             } else {
-                console.log(`⚠️ User ${userId} not found in room ${meetingId}`);
+                console.log(`âš ï¸ User ${userId} not found in room ${meetingId}`);
             }
         });
 
         // End meeting & generate report
         socket.on("end-meeting", async ({ meetingId }) => {
-            console.log(`📊 Generating attendance report for meeting: ${meetingId}`);
+            console.log(`ðŸ“Š Generating attendance report for meeting: ${meetingId}`);
             const room = connections[meetingId];
             const owner = meetingOwners[meetingId];
             const startTime = meetingStartTimes[meetingId];
             
             if (!room || room.length === 0) {
-                console.log(`⚠️ No room found or empty room for: ${meetingId}`);
+                console.log(`âš ï¸ No room found or empty room for: ${meetingId}`);
                 return;
             }
 
             if (!owner) {
-                console.log(`⚠️ No meeting owner found for: ${meetingId}`);
+                console.log(`âš ï¸ No meeting owner found for: ${meetingId}`);
             }
 
-            console.log(`📋 Room has ${room.length} participants:`, room.map(u => ({ userId: u.userId, userName: u.userName, totalTime: u.totalTime, verifiedTime: u.verifiedTime })));
+            console.log(`ðŸ“‹ Room has ${room.length} participants:`, room.map(u => ({ userId: u.userId, userName: u.userName, totalTime: u.totalTime, verifiedTime: u.verifiedTime })));
 
             const ownerUser = room.find(u => u.userId === owner);
             const ownerName = ownerUser ? ownerUser.userName : 'unknown';
@@ -477,11 +518,11 @@ export const connectToSocket = (server) => {
 
             try {
                 await new Attendance(report).save();
-                console.log("✅ Attendance report saved to database:", report);
+                console.log("âœ… Attendance report saved to database:", report);
                 
                 // Emit to all sockets in the meeting room
                 io.to(meetingId).emit("attendance-report", report);
-                console.log(`📤 Attendance report emitted to room: ${meetingId}`);
+                console.log(`ðŸ“¤ Attendance report emitted to room: ${meetingId}`);
 
                 // Send special notification to meeting owner
                 if (owner) {
@@ -491,20 +532,20 @@ export const connectToSocket = (server) => {
                             ...report,
                             message: "As the meeting owner, here is the final attendance report"
                         });
-                        console.log(`👑 Special owner report sent to: ${owner}`);
+                        console.log(`ðŸ‘‘ Special owner report sent to: ${owner}`);
                     }
                 }
 
                 // Optional: Clean up face data
                 await Face.deleteMany({ meetingId });
-                console.log(`🗑️ Face data cleaned up for meeting: ${meetingId}`);
+                console.log(`ðŸ—‘ï¸ Face data cleaned up for meeting: ${meetingId}`);
 
                 // Clean up meeting tracking data
                 delete meetingOwners[meetingId];
                 delete meetingStartTimes[meetingId];
                 delete waitingRoom[meetingId];
             } catch (err) {
-                console.error("❌ Error saving attendance:", err);
+                console.error("âŒ Error saving attendance:", err);
             }
         });
 
@@ -522,7 +563,7 @@ export const connectToSocket = (server) => {
             };
             polls[meetingId].push(poll);
             io.to(meetingId).emit("poll-created", poll);
-            console.log(`📊 Poll created in ${meetingId}: "${question}"`);
+            console.log(`ðŸ“Š Poll created in ${meetingId}: "${question}"`);
         });
 
         // Vote on a poll
@@ -541,7 +582,7 @@ export const connectToSocket = (server) => {
             poll.options[optionIndex].votes.push(socket.id);
 
             io.to(meetingId).emit("poll-updated", poll);
-            console.log(`🗳️ Vote cast in ${meetingId} on poll "${poll.question}"`);
+            console.log(`ðŸ—³ï¸ Vote cast in ${meetingId} on poll "${poll.question}"`);
         });
 
         // Add a decision
@@ -555,7 +596,7 @@ export const connectToSocket = (server) => {
             };
             decisions[meetingId].push(decision);
             io.to(meetingId).emit("decision-added", decision);
-            console.log(`📝 Decision recorded in ${meetingId}: "${text}" by ${proposedBy}`);
+            console.log(`ðŸ“ Decision recorded in ${meetingId}: "${text}" by ${proposedBy}`);
         });
 
         // Send a reaction (emoji)
@@ -583,7 +624,7 @@ export const connectToSocket = (server) => {
                 hasRaisedHand: (raisedHands[meetingId] || []).some(r => r.socketId === u.socketId),
             }));
             io.to(meetingId).emit("participant-list", updatedList);
-            console.log(`✋ Hand ${raised ? 'raised' : 'lowered'} by ${userName} in ${meetingId}`);
+            console.log(`âœ‹ Hand ${raised ? 'raised' : 'lowered'} by ${userName} in ${meetingId}`);
         });
 
         // ==================== TRANSCRIPT & SUMMARY ====================
@@ -591,12 +632,12 @@ export const connectToSocket = (server) => {
         // Relay live transcript entry to all participants
         socket.on("transcript-entry", ({ meetingId, text, speaker, lang, timestamp }) => {
             socket.to(meetingId).emit("transcript-entry", { text, speaker, lang, timestamp });
-            console.log(`📝 Transcript [${meetingId}] ${speaker}: ${text.substring(0, 60)}`);
+            console.log(`ðŸ“ Transcript [${meetingId}] ${speaker}: ${text.substring(0, 60)}`);
         });
 
         // Generate AI summary from transcript entries
         socket.on("generate-summary", async ({ meetingId, transcriptEntries }) => {
-            console.log(`🤖 Generating AI summary for meeting: ${meetingId}`);
+            console.log(`ðŸ¤– Generating AI summary for meeting: ${meetingId}`);
 
             const openaiKey = process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "your_openai_api_key_here"
                 ? process.env.OPENAI_API_KEY
@@ -614,27 +655,32 @@ export const connectToSocket = (server) => {
                         messages: [
                             {
                                 role: "system",
-                                content: `You are a meeting summarizer. Given the transcript below, produce a JSON object with exactly these fields:
+                                content: `You are a professional meeting summarizer. Given the transcript below, produce a JSON object with exactly these fields:
 {
-  "executiveSummary": "2-3 sentence high-level summary of the entire meeting",
-  "keyDiscussionPoints": ["Bullet point of a main topic discussed", "..."],
-  "decisionsTaken": ["Decision that was made during the meeting", "..."],
-  "actionItems": ["Task assigned, include owner if mentioned", "..."],
-  "risks": ["Risk or concern raised during discussion", "..."],
-  "nextSteps": ["Follow-up action or next meeting plan", "..."]
+  "executiveSummary": "A concise 2-3 sentence professional summary capturing the meeting purpose, key outcomes, and any decisions made.",
+  "keyDiscussionPoints": ["Specific topic discussed", "Use complete sentences", "Capture actual discussion content"],
+  "decisionsTaken": ["Clear decision that was made", "Include who decided if mentioned"],
+  "actionItems": ["Specific task with responsible person if mentioned", "e.g. 'John will prepare the Q3 report'"],
+  "risks": ["Risk or concern raised", "Leave empty array if none"],
+  "nextSteps": ["Follow-up action or next meeting plan", "Include timeline if mentioned"]
 }
-If any field has no items, return an empty array for that field. Transcript:`
+Requirements:
+- Use professional, clear language
+- Each bullet point should be a complete sentence
+- Be specific — use names, numbers, and details from the transcript
+- If a field has no items, return an empty array
+- Never invent or fabricate information not present in the transcript. Transcript:`
                             },
                             { role: "user", content: transcript }
                         ],
                         response_format: { type: "json_object" },
-                        temperature: 0.3,
+                        temperature: 0.2,
                         max_tokens: 2048
                     });
 
                     const summary = JSON.parse(response.choices[0].message.content);
                     io.to(meetingId).emit("summary-generated", summary);
-                    console.log(`📋 GPT summary generated for ${meetingId}: ${summary.executiveSummary?.substring(0, 80)}...`);
+                    console.log(`ðŸ“‹ GPT summary generated for ${meetingId}: ${summary.executiveSummary?.substring(0, 80)}...`);
                     await saveActionItems(meetingId, summary);
                     return;
                 } catch (err) {
@@ -644,7 +690,7 @@ If any field has no items, return an empty array for that field. Transcript:`
 
             const summary = extractSummary(transcriptEntries);
             io.to(meetingId).emit("summary-generated", summary);
-            console.log(`📋 Keyword summary generated for ${meetingId}: ${summary.executiveSummary?.substring(0, 80)}...`);
+            console.log(`ðŸ“‹ Keyword summary generated for ${meetingId}: ${summary.executiveSummary?.substring(0, 80)}...`);
             await saveActionItems(meetingId, summary);
         });
 

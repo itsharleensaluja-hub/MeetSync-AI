@@ -151,7 +151,7 @@ export default function VideoMeetComponent() {
   const [transcript, setTranscript] = useState([]);
   const [isRecording, setIsRecording] = useState(false);
   const [interimText, setInterimText] = useState('');
-  const [transcriptLang, setTranscriptLang] = useState('en-IN');
+  const [transcriptLang, setTranscriptLang] = useState('en-US');
   const [aiSummary, setAiSummary] = useState(null);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [generatingSummary, setGeneratingSummary] = useState(false);
@@ -168,6 +168,7 @@ export default function VideoMeetComponent() {
   const speechStreamRef = useRef(null);
   const speechWatchdogRef = useRef(null);
   const interimTimeoutRef = useRef(null);
+  const webSpeechTriedRef = useRef(false);
   const permissionsPromiseRef = useRef(null);
 
   // Ensure local video element gets srcObject whenever video is on
@@ -1232,7 +1233,7 @@ const enrollFace = async () => {
           const text = result[0].transcript.trim();
           const confidence = result[0].confidence;
           console.log(`📝 Web Speech: text="${text}" confidence=${confidence.toFixed(2)}`);
-          if (text && (confidence >= 0.4 || confidence === 0)) {
+          if (text && (confidence >= 0.2 || confidence === 0)) {
             if (confidence === 0) console.warn('⚠️ Web Speech: confidence=0 (API unsupported), accepting result');
             const entry = { text, speaker: username || 'Anonymous', lang: 'auto', timestamp: Date.now() };
             setTranscript(prev => [...prev, entry]);
@@ -1268,6 +1269,33 @@ const enrollFace = async () => {
       isRecordingRef.current = false;
     };
 
+    let restartAttempts = 0;
+    const MAX_RESTART_ATTEMPTS = 5;
+    const tryRestart = () => {
+      if (!isRecordingRef.current || recognitionRef.current !== recognition) return;
+      if (restartAttempts >= MAX_RESTART_ATTEMPTS) {
+        console.error('❌ Web Speech: max restart attempts reached, stopping');
+        setIsRecording(false);
+        isRecordingRef.current = false;
+        return;
+      }
+      restartAttempts++;
+      const delay = Math.min(200 * Math.pow(2, restartAttempts - 1), 3000);
+      console.log(`🎤 Web Speech: restart attempt ${restartAttempts}/${MAX_RESTART_ATTEMPTS} in ${delay}ms`);
+      setTimeout(() => {
+        if (!isRecordingRef.current || recognitionRef.current !== recognition) return;
+        try {
+          recognition.start();
+          console.log('🎤 Web Speech: restarted');
+          restartAttempts = 0;
+          rearmWatchdog();
+        } catch (e) {
+          console.error('❌ Web Speech restart failed:', e.message);
+          tryRestart();
+        }
+      }, delay);
+    };
+
     recognition.onend = () => {
       console.log('🎤 Web Speech: ended');
       if (recognitionRef.current !== recognition) {
@@ -1275,13 +1303,7 @@ const enrollFace = async () => {
         return;
       }
       if (isRecordingRef.current) {
-        try {
-          recognition.start();
-          console.log('🎤 Web Speech: restarted');
-          rearmWatchdog();
-        } catch (e) {
-          console.error('❌ Web Speech restart failed:', e.message);
-        }
+        tryRestart();
       }
     };
 
@@ -1367,10 +1389,16 @@ const enrollFace = async () => {
       console.error('❌ Transformers pipeline error:', err);
       setTranscriptLoading('');
       setTranscriptError('Local speech model unavailable. Using browser speech.');
-      // Recovery: restart Web Speech instead of killing transcription
-      if (isRecordingRef.current) {
+      // Recovery: only retry Web Speech if we haven't already tried it
+      if (isRecordingRef.current && !webSpeechTriedRef.current) {
+        webSpeechTriedRef.current = true;
         console.log('🔄 Transformers failed, restarting Web Speech...');
         startWebSpeech();
+      } else if (isRecordingRef.current) {
+        console.log('🔄 Web Speech already attempted, stopping transcription');
+        setTranscriptError('Speech recognition unavailable. Try manual entry below.');
+        setIsRecording(false);
+        isRecordingRef.current = false;
       }
     }
   };
@@ -1379,6 +1407,7 @@ const enrollFace = async () => {
     setTranscriptError('');
     setIsRecording(true);
     isRecordingRef.current = true;
+    webSpeechTriedRef.current = false;
 
     const webSpeechStarted = await startWebSpeech();
     if (webSpeechStarted) {
@@ -1386,6 +1415,7 @@ const enrollFace = async () => {
       return;
     }
 
+    webSpeechTriedRef.current = true;
     console.log('🎤 Using Transformers.js (Firefox/Safari)');
     startTransformers();
   };
