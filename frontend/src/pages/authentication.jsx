@@ -21,7 +21,10 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import PersonIcon from '@mui/icons-material/Person';
 import KeyIcon from '@mui/icons-material/Key';
 import PsychologyIcon from '@mui/icons-material/Psychology';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import CircularProgress from '@mui/material/CircularProgress';
+import Typography from '@mui/material/Typography';
+import Link from '@mui/material/Link';
 import { AuthContext } from '../contexts/AuthContext';
 import { Snackbar } from '@mui/material';
 
@@ -93,62 +96,45 @@ export default function Authentication() {
     return (
         <Grid container component="main" sx={{ height: '100vh', background: '#131b2e' }}>
             {/* LEFT: Brand Panel */}
-            <Grid
-                item
-                xs={false}
-                sm={4}
-                md={7}
-                sx={{
-                    background: 'linear-gradient(135deg, #0f1729 0%, #1a2340 50%, #131b2e 100%)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    position: 'relative',
-                    overflow: 'hidden',
-                }}
-            >
-                {/* Decorative circles */}
-                <Box sx={{
-                    position: 'absolute', width: 400, height: 400, borderRadius: '50%',
-                    background: 'radial-gradient(circle, rgba(100,94,251,0.08) 0%, transparent 70%)',
-                    top: '-10%', left: '-10%',
-                }} />
-                <Box sx={{
-                    position: 'absolute', width: 300, height: 300, borderRadius: '50%',
-                    background: 'radial-gradient(circle, rgba(100,94,251,0.06) 0%, transparent 70%)',
-                    bottom: '5%', right: '5%',
-                }} />
-                <Box sx={{
-                    position: 'absolute', width: 200, height: 200, borderRadius: '50%',
-                    background: 'radial-gradient(circle, rgba(100,94,251,0.04) 0%, transparent 60%)',
-                    top: '40%', right: '15%',
-                }} />
-
-                <Box sx={{ textAlign: 'center', zIndex: 1, px: 4 }}>
-                    <Avatar sx={{ width: 72, height: 72, bgcolor: '#645efb', mx: 'auto', mb: 3 }}>
-                        <PsychologyIcon sx={{ fontSize: 40 }} />
-                    </Avatar>
-                    <h1 style={{ fontSize: 36, fontWeight: 800, color: 'white', margin: 0, letterSpacing: '-0.5px' }}>
-                        MeetSync AI
-                    </h1>
-                    <p style={{ fontSize: 16, color: '#8a8fa8', marginTop: 8, lineHeight: 1.6, maxWidth: 360, margin: '12px auto 0' }}>
-                        Smart meetings with AI-powered attendance, real-time polling, and team collaboration.
-                    </p>
-                    <Box sx={{ mt: 5, display: 'flex', flexDirection: 'column', gap: 2.5, alignItems: 'flex-start', maxWidth: 280, mx: 'auto' }}>
-                        {[
-                            { icon: '✓', text: 'AI Face Attendance Tracking' },
-                            { icon: '✓', text: 'Live Polls & Decision Tracking' },
-                            { icon: '✓', text: 'Secure Real-time Meetings' },
-                        ].map((item, i) => (
-                            <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                                <Box sx={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(100,94,251,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#645efb', fontSize: 12, fontWeight: 700 }}>{item.icon}</Box>
-                                <span style={{ fontSize: 14, color: '#c3c0ff' }}>{item.text}</span>
-                            </Box>
-                        ))}
+                <Grid
+                    item
+                    xs={false}
+                    sm={4}
+                    md={7}
+                    sx={{
+                        background: '#0f1729',
+                        backgroundImage: 'radial-gradient(circle, rgba(100,94,251,0.08) 1px, transparent 1px)',
+                        backgroundSize: '24px 24px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                    }}
+                >
+                    <Box sx={{ textAlign: 'center', zIndex: 1, px: 4 }}>
+                        <Avatar sx={{ width: 72, height: 72, bgcolor: '#645efb', mx: 'auto', mb: 3 }}>
+                            <PsychologyIcon sx={{ fontSize: 40 }} />
+                        </Avatar>
+                        <Typography variant="h3" sx={{ fontSize: 36, fontWeight: 600, color: 'white', letterSpacing: '-0.5px', mb: 1.5 }}>
+                            MeetSync AI
+                        </Typography>
+                        <Typography sx={{ fontSize: 15, color: '#8a8fa8', lineHeight: 1.7, maxWidth: 360, mx: 'auto' }}>
+                            Smart meetings with AI-powered attendance, real-time polling, and team collaboration.
+                        </Typography>
+                        <Box sx={{ mt: 5, display: 'flex', flexDirection: 'column', gap: 2.5, alignItems: 'flex-start', maxWidth: 280, mx: 'auto' }}>
+                            {[
+                                { text: 'AI Face Attendance Tracking' },
+                                { text: 'Live Polls & Decision Tracking' },
+                                { text: 'Secure Real-time Meetings' },
+                            ].map((item, i) => (
+                                <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                    <CheckCircleOutlineIcon sx={{ color: '#645efb', fontSize: 20 }} />
+                                    <Typography sx={{ fontSize: 14, color: '#c3c0ff' }}>{item.text}</Typography>
+                                </Box>
+                            ))}
+                        </Box>
                     </Box>
-                </Box>
-            </Grid>
+                </Grid>
 
             {/* RIGHT: Form Panel */}
             <Grid item xs={12} sm={8} md={5} sx={{
@@ -166,148 +152,186 @@ export default function Authentication() {
                         flexDirection: 'column',
                         alignItems: 'center',
                         width: '100%',
-                        maxWidth: 380,
+                        maxWidth: 400,
                     }}
                 >
-                    <Avatar sx={{ width: 52, height: 52, bgcolor: '#645efb', mb: 2 }}>
-                        <LockOutlinedIcon />
-                    </Avatar>
+                    <Box sx={{
+                        width: '100%',
+                        p: 4,
+                        background: 'rgba(15,23,41,0.5)',
+                        backdropFilter: 'blur(16px)',
+                        border: '1px solid rgba(255,255,255,0.06)',
+                        borderRadius: '20px',
+                    }}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
+                            <Avatar sx={{ width: 48, height: 48, bgcolor: '#645efb', mb: 2 }}>
+                                <LockOutlinedIcon />
+                            </Avatar>
+                            <Typography variant="h5" sx={{ fontWeight: 600, color: 'white', textAlign: 'center' }}>
+                                {formState === 0 ? 'Welcome Back' : 'Create Account'}
+                            </Typography>
+                            <Typography sx={{ fontSize: 14, color: '#8a8fa8', textAlign: 'center', mt: 0.5 }}>
+                                {formState === 0 ? 'Sign in to start or join a meeting' : 'Register to get started with MeetSync AI'}
+                            </Typography>
+                        </Box>
 
-                    <h2 style={{ fontSize: 22, fontWeight: 700, color: 'white', margin: 0, textAlign: 'center' }}>
-                        {formState === 0 ? 'Welcome Back' : 'Create Account'}
-                    </h2>
-                    <p style={{ fontSize: 14, color: '#8a8fa8', margin: '4px 0 24px', textAlign: 'center' }}>
-                        {formState === 0 ? 'Sign in to start or join a meeting' : 'Register to get started with MeetSync AI'}
-                    </p>
-
-                    <Box sx={{ display: 'flex', gap: 1, mb: 3, background: '#0f1729', borderRadius: '12px', padding: 3 }}>
-                        <Button
-                            variant={formState === 0 ? "contained" : "text"}
-                            onClick={() => { setFormState(0); setError(""); }}
-                            sx={{
-                                flex: 1,
-                                background: formState === 0 ? '#645efb' : 'transparent',
-                                color: formState === 0 ? 'white' : '#8a8fa8',
-                                '&:hover': { background: formState === 0 ? '#7b75ff' : 'rgba(100,94,251,0.1)' },
-                                borderRadius: '10px',
-                                fontWeight: 700,
-                                textTransform: 'none',
-                                fontSize: 14,
-                                py: 1,
-                            }}
-                        >
-                            Sign In
-                        </Button>
-                        <Button
-                            variant={formState === 1 ? "contained" : "text"}
-                            onClick={() => { setFormState(1); setError(""); }}
-                            sx={{
-                                flex: 1,
-                                background: formState === 1 ? '#645efb' : 'transparent',
-                                color: formState === 1 ? 'white' : '#8a8fa8',
-                                '&:hover': { background: formState === 1 ? '#7b75ff' : 'rgba(100,94,251,0.1)' },
-                                borderRadius: '10px',
-                                fontWeight: 700,
-                                textTransform: 'none',
-                                fontSize: 14,
-                                py: 1,
-                            }}
-                        >
-                            Sign Up
-                        </Button>
-                    </Box>
-
-                    <Box component="form" noValidate sx={{ width: '100%' }}>
-                        {formState === 1 ? <TextField
-                            margin="normal"
-                            required
-                            fullWidth
-                            id="name"
-                            label="Full Name"
-                            name="name"
-                            value={name}
-                            autoFocus
-                            onChange={(e) => setName(e.target.value)}
-                            sx={inputStyles}
-                            InputProps={{
-                                startAdornment: <PersonIcon sx={{ color: '#45464d', mr: 0.5 }} />,
-                            }}
-                        /> : <></>}
-
-                        <TextField
-                            margin="normal"
-                            required
-                            fullWidth
-                            id="username"
-                            label="Username"
-                            name="username"
-                            value={username}
-                            autoFocus={formState === 0}
-                            onChange={(e) => setUsername(e.target.value)}
-                            onFocus={(e) => { setTimeout(() => setUsername(e.target.value), 50); }}
-                            autoComplete="username"
-                            sx={inputStyles}
-                            InputProps={{
-                                startAdornment: <PersonIcon sx={{ color: '#45464d', mr: 0.5 }} />,
-                            }}
-                        />
-                        <TextField
-                            margin="normal"
-                            required
-                            fullWidth
-                            name="password"
-                            label="Password"
-                            value={password}
-                            type="password"
-                            onChange={(e) => setPassword(e.target.value)}
-                            onFocus={(e) => { setTimeout(() => setPassword(e.target.value), 50); }}
-                            autoComplete="current-password"
-                            id="password"
-                            sx={inputStyles}
-                            InputProps={{
-                                startAdornment: <KeyIcon sx={{ color: '#45464d', mr: 0.5 }} />,
-                            }}
-                        />
-
-                        {error && (
-                            <Box sx={{
-                                p: 1.5,
-                                borderRadius: '8px',
-                                background: 'rgba(186,26,26,0.1)',
-                                borderLeft: '3px solid #ba1a1a',
-                                mt: 1,
-                            }}>
-                                <p style={{ color: "#ba1a1a", fontSize: 13, margin: 0, lineHeight: 1.4 }}>{error}</p>
+                        <Box sx={{ display: 'flex', p: 3, background: '#0f1729', borderRadius: '24px', mb: 3 }}>
+                            <Box
+                                onClick={() => { setFormState(0); setError(""); }}
+                                sx={{
+                                    flex: 1,
+                                    py: 0.8,
+                                    borderRadius: '21px',
+                                    background: formState === 0 ? '#645efb' : 'transparent',
+                                    color: formState === 0 ? 'white' : '#8a8fa8',
+                                    cursor: 'pointer',
+                                    textAlign: 'center',
+                                    fontWeight: 600,
+                                    fontSize: 14,
+                                    transition: 'all 0.2s ease',
+                                    '&:hover': { background: formState === 0 ? '#7b75ff' : 'rgba(100,94,251,0.1)' },
+                                }}
+                            >
+                                Sign In
                             </Box>
-                        )}
+                            <Box
+                                onClick={() => { setFormState(1); setError(""); }}
+                                sx={{
+                                    flex: 1,
+                                    py: 0.8,
+                                    borderRadius: '21px',
+                                    background: formState === 1 ? '#645efb' : 'transparent',
+                                    color: formState === 1 ? 'white' : '#8a8fa8',
+                                    cursor: 'pointer',
+                                    textAlign: 'center',
+                                    fontWeight: 600,
+                                    fontSize: 14,
+                                    transition: 'all 0.2s ease',
+                                    '&:hover': { background: formState === 1 ? '#7b75ff' : 'rgba(100,94,251,0.1)' },
+                                }}
+                            >
+                                Sign Up
+                            </Box>
+                        </Box>
 
-                        <Button
-                            type="button"
-                            fullWidth
-                            variant="contained"
-                            disabled={loading}
-                            sx={{
-                                mt: 2.5,
-                                mb: 1,
-                                background: '#645efb',
-                                '&:hover': { background: '#7b75ff' },
-                                '&.Mui-disabled': { background: '#3a3570', color: 'rgba(255,255,255,0.5)' },
-                                borderRadius: '10px',
-                                py: 1.5,
-                                fontWeight: 700,
-                                textTransform: 'none',
-                                fontSize: 15,
-                                height: 48,
-                            }}
-                            onClick={handleAuth}
-                        >
-                            {loading ? (
-                                <CircularProgress size={22} sx={{ color: 'white' }} />
-                            ) : (
-                                formState === 0 ? "Sign In" : "Create Account"
+                        <Box component="form" noValidate sx={{ width: '100%' }}>
+                            {formState === 1 ? <TextField
+                                margin="normal"
+                                required
+                                fullWidth
+                                id="name"
+                                label="Full Name"
+                                name="name"
+                                value={name}
+                                autoFocus
+                                onChange={(e) => setName(e.target.value)}
+                                sx={inputStyles}
+                                InputProps={{
+                                    startAdornment: <PersonIcon sx={{ color: '#45464d', mr: 0.5 }} />,
+                                }}
+                            /> : <></>}
+
+                            <TextField
+                                margin="normal"
+                                required
+                                fullWidth
+                                id="username"
+                                label="Username"
+                                name="username"
+                                value={username}
+                                autoFocus={formState === 0}
+                                onChange={(e) => setUsername(e.target.value)}
+                                onFocus={(e) => { setTimeout(() => setUsername(e.target.value), 50); }}
+                                autoComplete="username"
+                                sx={inputStyles}
+                                InputProps={{
+                                    startAdornment: <PersonIcon sx={{ color: '#45464d', mr: 0.5 }} />,
+                                }}
+                            />
+                            <TextField
+                                margin="normal"
+                                required
+                                fullWidth
+                                name="password"
+                                label="Password"
+                                value={password}
+                                type="password"
+                                onChange={(e) => setPassword(e.target.value)}
+                                onFocus={(e) => { setTimeout(() => setPassword(e.target.value), 50); }}
+                                autoComplete="current-password"
+                                id="password"
+                                sx={inputStyles}
+                                InputProps={{
+                                    startAdornment: <KeyIcon sx={{ color: '#45464d', mr: 0.5 }} />,
+                                }}
+                            />
+
+                            {formState === 0 && (
+                                <Box sx={{ textAlign: 'right', mt: 0.5, mb: 1 }}>
+                                    <Link href="#" sx={{ color: '#8a8fa8', fontSize: 13, textDecoration: 'none', '&:hover': { color: '#645efb' } }}>
+                                        Forgot password?
+                                    </Link>
+                                </Box>
                             )}
-                        </Button>
 
+                            {error && (
+                                <Box sx={{
+                                    p: 1.5,
+                                    borderRadius: '8px',
+                                    background: 'rgba(255,77,77,0.08)',
+                                    borderLeft: '3px solid #ff4d4d',
+                                    mt: 1,
+                                }}>
+                                    <Typography sx={{ color: '#ff4d4d', fontSize: 13, lineHeight: 1.4 }}>{error}</Typography>
+                                </Box>
+                            )}
+
+                            <Button
+                                type="button"
+                                fullWidth
+                                variant="contained"
+                                disabled={loading}
+                                sx={{
+                                    mt: 2.5,
+                                    mb: 1,
+                                    background: 'linear-gradient(135deg, #645efb 0%, #7b75ff 100%)',
+                                    '&:hover': { background: 'linear-gradient(135deg, #7b75ff 0%, #8d87ff 100%)', boxShadow: '0 4px 20px rgba(100,94,251,0.3)' },
+                                    '&.Mui-disabled': { background: '#3a3570', color: 'rgba(255,255,255,0.5)' },
+                                    borderRadius: '12px',
+                                    py: 1.5,
+                                    fontWeight: 600,
+                                    textTransform: 'none',
+                                    fontSize: 15,
+                                    height: 48,
+                                    transition: 'all 0.2s ease',
+                                }}
+                                onClick={handleAuth}
+                            >
+                                {loading ? (
+                                    <CircularProgress size={22} sx={{ color: 'white' }} />
+                                ) : (
+                                    formState === 0 ? "Sign In" : "Create Account"
+                                )}
+                            </Button>
+                        </Box>
+
+                        <Box sx={{ textAlign: 'center', mt: 2.5 }}>
+                            <Typography sx={{ color: '#8a8fa8', fontSize: 13 }}>
+                                {formState === 0 ? (
+                                    <>Don't have an account?{' '}
+                                        <Link onClick={() => { setFormState(1); setError(""); }} sx={{ color: '#645efb', cursor: 'pointer', textDecoration: 'none', fontWeight: 600, '&:hover': { color: '#8d87ff' } }}>
+                                            Sign Up
+                                        </Link>
+                                    </>
+                                ) : (
+                                    <>Already have an account?{' '}
+                                        <Link onClick={() => { setFormState(0); setError(""); }} sx={{ color: '#645efb', cursor: 'pointer', textDecoration: 'none', fontWeight: 600, '&:hover': { color: '#8d87ff' } }}>
+                                            Sign In
+                                        </Link>
+                                    </>
+                                )}
+                            </Typography>
+                        </Box>
                     </Box>
                 </Box>
             </Grid>
@@ -321,7 +345,7 @@ export default function Authentication() {
                     '& .MuiSnackbarContent-root': {
                         background: '#0f1729',
                         color: 'white',
-                        borderRadius: '10px',
+                        borderRadius: '12px',
                         border: '1px solid rgba(100,94,251,0.2)',
                     }
                 }}
