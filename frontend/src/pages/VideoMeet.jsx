@@ -41,6 +41,7 @@ import PanToolIcon from '@mui/icons-material/PanTool';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ChecklistIcon from '@mui/icons-material/Checklist';
 import PeopleIcon from '@mui/icons-material/People';
+import HowToVoteIcon from '@mui/icons-material/HowToVote';
 import server from '../environment';
 
 const server_url = server;
@@ -107,6 +108,7 @@ export default function VideoMeetComponent() {
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState('');
   const [newMessages, setNewMessages] = useState(0);
+  const [newPolls, setNewPolls] = useState(0);
   const [askForUsername, setAskForUsername] = useState(true);
   const [username, setUsername] = useState('');
   // Sync username to localStorage for attendance analytics across pages
@@ -127,6 +129,8 @@ export default function VideoMeetComponent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('chat');
   const [lastNonParticipantsTab, setLastNonParticipantsTab] = useState('chat');
+  const activeTabRef = useRef(null);
+  useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
   
   // Polls & Decisions state
   const [polls, setPolls] = useState([]);
@@ -967,6 +971,7 @@ const enrollFace = async () => {
 
       socketRef.current.on('poll-created', (poll) => {
         setPolls(prev => [...prev, poll]);
+        if (activeTabRef.current !== 'polls') setNewPolls(prev => prev + 1);
       });
       socketRef.current.on('poll-updated', (updatedPoll) => {
         setPolls(prev => prev.map(p => p.id === updatedPoll.id ? updatedPoll : p));
@@ -1635,47 +1640,48 @@ const enrollFace = async () => {
 
 
 
-  // debug audio
-  const handleAudio = () => {
-    setAudio(prev => {
-      const newState = !prev;
-      console.log('🎤 Toggling audio:', prev ? 'OFF' : 'ON', '→', newState ? 'ON' : 'OFF');
+  const handleAudio = async () => {
+    const newState = !audio;
+    console.log('🎤 Toggling audio:', audio ? 'OFF' : 'ON', '→', newState ? 'ON' : 'OFF');
 
-      if (window.localStream) {
-        const audioTracks = window.localStream.getAudioTracks();
-        console.log('🎤 Found', audioTracks.length, 'audio track(s)');
-        
-        if (audioTracks.length === 0) {
-          console.error('⚠️ No audio tracks found! Mic might not be permitted.');
-          alert('No microphone detected. Please check browser permissions and rejoin the meeting.');
-          return prev;
-        }
-        
-        audioTracks.forEach((track, idx) => {
-          track.enabled = newState;
-          console.log(`🎤 Track ${idx}:`, track.label, '- Enabled:', track.enabled, '- ReadyState:', track.readyState, '- Muted:', track.muted);
-        });
-        
-        // CRITICAL: Update all peer connection senders
-        for (let id in connections) {
-          if (id === socketIdRef.current) continue;
-          const senders = connections[id].getSenders();
-          const audioSender = senders.find(s => s.track?.kind === 'audio');
-          if (audioSender && audioSender.track) {
-            audioSender.track.enabled = newState;
-            console.log(`📡 Updated sender for peer ${id}:`, audioSender.track.enabled);
+    if (!window.localStream) {
+      console.error('⚠️ No localStream found!');
+      alert('No media stream detected. Please rejoin the meeting.');
+      return;
+    }
+
+    const audioTracks = window.localStream.getAudioTracks();
+    console.log('🎤 Found', audioTracks.length, 'audio track(s)');
+
+    if (audioTracks.length === 0) {
+      console.error('⚠️ No audio tracks found! Mic might not be permitted.');
+      alert('No microphone detected. Please check browser permissions and rejoin the meeting.');
+      return;
+    }
+
+    const audioTrack = audioTracks[0];
+
+    for (let id in connections) {
+      if (id === socketIdRef.current) continue;
+      const senders = connections[id].getSenders();
+      const audioSender = senders.find(s => s.track?.kind === 'audio');
+      if (audioSender) {
+        try {
+          if (newState) {
+            await audioSender.replaceTrack(audioTrack);
+            console.log(`📡 Audio track restored for peer ${id}`);
+          } else {
+            await audioSender.replaceTrack(null);
+            console.log(`📡 Audio track removed for peer ${id}`);
           }
+        } catch (e) {
+          console.error('Audio replaceTrack error:', e);
         }
-        
-        console.log(`✅ Audio ${newState ? 'ENABLED' : 'DISABLED'} - other participants ${newState ? 'CAN' : 'CANNOT'} hear you`);
-      } else {
-        console.error('⚠️ No localStream found!');
-        alert('No media stream detected. Please rejoin the meeting.');
-        return prev;
       }
+    }
 
-      return newState;
-    });
+    setAudio(newState);
+    console.log(`✅ Audio ${newState ? 'ENABLED' : 'DISABLED'} - other participants ${newState ? 'CAN' : 'CANNOT'} hear you`);
   };
 
 
@@ -1794,6 +1800,17 @@ const enrollFace = async () => {
       setActiveTab('participants');
       setSidebarOpen(true);
     }
+  };
+
+  const togglePolls = () => {
+    if (activeTab === 'polls') {
+      setActiveTab(lastNonParticipantsTab);
+    } else {
+      setLastNonParticipantsTab(activeTab);
+      setActiveTab('polls');
+      setSidebarOpen(true);
+    }
+    setNewPolls(0);
   };
 
   const sendReaction = (emoji) => {
@@ -2110,9 +2127,6 @@ const enrollFace = async () => {
                 </button>
                 <button onClick={() => handleTabChange('attendance')} className={`${styles.tabButton} ${activeTab === 'attendance' ? styles.tabActive : ''}`}>
                   Attendance
-                </button>
-                <button onClick={() => handleTabChange('polls')} className={`${styles.tabButton} ${activeTab === 'polls' ? styles.tabActive : ''}`}>
-                  Polls
                 </button>
                 <button onClick={() => handleTabChange('transcript')} className={`${styles.tabButton} ${activeTab === 'transcript' ? styles.tabActive : ''}`}>
                   Transcript
@@ -2570,6 +2584,10 @@ const enrollFace = async () => {
                     ))}
                   </div>
                 )}
+              </button>
+              <button onClick={togglePolls} className={`${styles.controlButton} ${activeTab === 'polls' ? styles.controlActive : ''}`} title="Polls" style={{ position: 'relative' }}>
+                <HowToVoteIcon />
+                {newPolls > 0 && <span className={styles.handBadge}>{newPolls}</span>}
               </button>
               <button onClick={toggleHandRaise} className={`${styles.controlButton} ${handRaised ? styles.controlActive : ''}`} title={handRaised ? "Lower Hand" : "Raise Hand"}>
                 <PanToolIcon />

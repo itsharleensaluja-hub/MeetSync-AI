@@ -244,9 +244,9 @@ export default function Authentication() {
                             value={username}
                             autoFocus={formState === 0}
                             onChange={(e) => setUsername(e.target.value)}
+                            onFocus={(e) => { setTimeout(() => setUsername(e.target.value), 50); }}
                             autoComplete="username"
                             sx={inputStyles}
-                            inputProps={{ onInput: (e) => setUsername(e.target.value) }}
                             InputProps={{
                                 startAdornment: <PersonIcon sx={{ color: '#45464d', mr: 0.5 }} />,
                             }}
@@ -260,10 +260,10 @@ export default function Authentication() {
                             value={password}
                             type="password"
                             onChange={(e) => setPassword(e.target.value)}
+                            onFocus={(e) => { setTimeout(() => setPassword(e.target.value), 50); }}
                             autoComplete="current-password"
                             id="password"
                             sx={inputStyles}
-                            inputProps={{ onInput: (e) => setPassword(e.target.value) }}
                             InputProps={{
                                 startAdornment: <KeyIcon sx={{ color: '#45464d', mr: 0.5 }} />,
                             }}

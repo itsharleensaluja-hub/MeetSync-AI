@@ -883,6 +883,7 @@ Requirements:
                         delete messages[k];
                         delete raisedHands[k];
                         delete waitingRoom[k];
+                        delete meetingOwners[k];
                     }
                     break;
                 }
