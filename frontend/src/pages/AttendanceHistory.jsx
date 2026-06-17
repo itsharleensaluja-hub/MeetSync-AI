@@ -81,7 +81,7 @@ export default function AttendanceHistory() {
 
       {!ownerName && (
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 3, p: 2, bgcolor: 'grey.100', borderRadius: 2 }}>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 0 }}>
             Enter the name you used in the meeting:
           </Typography>
           <TextField

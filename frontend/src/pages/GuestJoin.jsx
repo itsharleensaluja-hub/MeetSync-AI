@@ -40,7 +40,7 @@ export default function GuestJoin() {
                     <div>
                         <h2>Join a Meeting</h2>
 
-                        <div style={{ display: 'flex', gap: "10px", marginTop: '24px' }}>
+                        <div style={{ display: 'flex', gap: "10px", marginTop: '24px', alignItems: 'center' }}>
                             <TextField
                                 onChange={e => setJoinInput(e.target.value)}
                                 label="Paste link or enter code"

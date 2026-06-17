@@ -124,7 +124,7 @@ export default function VideoMeetComponent() {
   const [isMeetingOwner, setIsMeetingOwner] = useState(false);
   const [ownerReportReceived, setOwnerReportReceived] = useState(false);
   const [liveAttendance, setLiveAttendance] = useState([]);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('chat');
   const [lastNonParticipantsTab, setLastNonParticipantsTab] = useState('chat');
   

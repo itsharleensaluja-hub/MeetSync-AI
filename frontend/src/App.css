@@ -29,6 +29,8 @@
   align-items: center;
 }
 
+.landingPageContainer nav .navlist p { margin: 0; }
+
 .landingMainContainer {
   display: flex;
   justify-content: space-between;
@@ -47,6 +49,9 @@
   padding: 1rem;
   border-radius: 20px;
   margin-top: 1.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .landingMainContainer>div:nth-child(1) div[role='button'] a {

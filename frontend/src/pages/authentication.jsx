@@ -84,6 +84,7 @@ export default function Authentication() {
         },
         '& .MuiInputLabel-root': { color: '#8a8fa8' },
         '& .MuiInputBase-input': { color: 'white', ml: 1 },
+        '& input:-webkit-autofill': { WebkitBoxShadow: '0 0 0 1000px #0f1729 inset' },
         '& .MuiInputLabel-root.Mui-focused': { color: '#645efb' },
         '& .MuiInputAdornment-root': { color: '#45464d' },
         mb: 1.5,
@@ -243,7 +244,9 @@ export default function Authentication() {
                             value={username}
                             autoFocus={formState === 0}
                             onChange={(e) => setUsername(e.target.value)}
+                            autoComplete="username"
                             sx={inputStyles}
+                            inputProps={{ onInput: (e) => setUsername(e.target.value) }}
                             InputProps={{
                                 startAdornment: <PersonIcon sx={{ color: '#45464d', mr: 0.5 }} />,
                             }}
@@ -257,8 +260,10 @@ export default function Authentication() {
                             value={password}
                             type="password"
                             onChange={(e) => setPassword(e.target.value)}
+                            autoComplete="current-password"
                             id="password"
                             sx={inputStyles}
+                            inputProps={{ onInput: (e) => setPassword(e.target.value) }}
                             InputProps={{
                                 startAdornment: <KeyIcon sx={{ color: '#45464d', mr: 0.5 }} />,
                             }}

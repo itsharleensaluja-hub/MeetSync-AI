@@ -19,7 +19,7 @@ import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
 import HomeIcon from '@mui/icons-material/Home';
 
-import { IconButton } from '@mui/material';
+import { IconButton, Box } from '@mui/material';
 
 function History() {
 
@@ -60,11 +60,13 @@ function History() {
     return (
         <div>
 
-            <IconButton onClick={() => {
-                routeTo("/home")
-            }}>
-                <HomeIcon />
-            </IconButton >
+            <Box sx={{ px: 2, pt: 2 }}>
+                <IconButton onClick={() => {
+                    routeTo("/home")
+                }}>
+                    <HomeIcon />
+                </IconButton >
+            </Box>
             {
                 (meetings.length !== 0) ? meetings.map((e, i) => {
                     return (

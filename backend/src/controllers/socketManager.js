@@ -43,6 +43,10 @@ let raisedHands = {};
 // Users waiting for host approval before entering the meeting
 let waitingRoom = {};
 
+// pendingQueue: { 'meeting-code': [{ socketId, userId, userName }] }
+// Users who joined before the owner arrived — held until owner joins
+let pendingQueue = {};
+
 // transcripts: { 'meeting-code': [{text, speaker, lang, timestamp}] }
 let transcripts = {}; // Server-side store for merging across participants
 
@@ -242,8 +246,64 @@ export const connectToSocket = (server) => {
                 meetingStartTimes[path] = new Date();
             }
 
-            // WAITING ROOM: if room already has an owner and participants,
-            // put this user in the waiting room instead of admitting them directly
+            // ── Determine owner before any gates ──
+            if (isOwner && !meetingOwners[path]) {
+                meetingOwners[path] = userId;
+                io.to(socket.id).emit('you-are-owner');
+            } else if (connections[path].length === 0 && !meetingOwners[path]) {
+                meetingOwners[path] = userId;
+                io.to(socket.id).emit('you-are-owner');
+            }
+
+            // ── CASE 1: This user IS the meeting owner ──
+            if (meetingOwners[path] === userId) {
+                socket.join(path);
+                connections[path].push({
+                    socketId: socket.id,
+                    userId: userId || null,
+                    userName: userName || 'Anonymous',
+                    totalTime: 0,
+                    verifiedTime: 0
+                });
+                timeOnline[socket.id] = new Date();
+                for (let a = 0; a < connections[path].length; a++) {
+                    io.to(connections[path][a].socketId).emit("user-joined", socket.id, connections[path].map(u => u.socketId));
+                }
+                const rp1 = (connections[path] || []).map(u => ({
+                    socketId: u.socketId, userId: u.userId, userName: u.userName,
+                    hasRaisedHand: (raisedHands[path] || []).some(r => r.socketId === u.socketId),
+                }));
+                io.to(path).emit("participant-list", rp1);
+                if (messages[path] !== undefined) {
+                    for (let a = 0; a < messages[path].length; ++a) {
+                        io.to(socket.id).emit("chat-message", messages[path][a]['data'],
+                            messages[path][a]['sender'], messages[path][a]['socket-id-sender']);
+                    }
+                }
+                // Drain pendingQueue into waitingRoom, notify owner
+                if (pendingQueue[path] && pendingQueue[path].length > 0) {
+                    if (!waitingRoom[path]) waitingRoom[path] = [];
+                    pendingQueue[path].forEach(p => {
+                        waitingRoom[path].push(p);
+                        io.to(p.socketId).emit('waiting-for-approval');
+                        io.to(socket.id).emit('join-request', {
+                            socketId: p.socketId, userId: p.userId, userName: p.userName
+                        });
+                    });
+                    delete pendingQueue[path];
+                }
+                return;
+            }
+
+            // ── CASE 2: No owner in the room yet → hold in pendingQueue ──
+            if (!meetingOwners[path]) {
+                if (!pendingQueue[path]) pendingQueue[path] = [];
+                pendingQueue[path].push({ socketId: socket.id, userId, userName });
+                io.to(socket.id).emit('waiting-for-approval');
+                return;
+            }
+
+            // ── CASE 3: Owner present and room occupied → waiting room ──
             if (meetingOwners[path] && connections[path].length > 0) {
                 if (!waitingRoom[path]) waitingRoom[path] = [];
                 waitingRoom[path].push({ socketId: socket.id, userId, userName });
@@ -262,21 +322,8 @@ export const connectToSocket = (server) => {
                 return;
             }
 
-            // Set meeting owner - use isOwner flag from client, fall back to first-join
-            if (isOwner && !meetingOwners[path]) {
-                meetingOwners[path] = userId;
-                io.to(socket.id).emit('you-are-owner');
-                console.log(`ðŸ‘‘ Meeting owner set: ${userName} (${userId}) for meeting: ${path}`);
-            } else if (connections[path].length === 0 && !meetingOwners[path]) {
-                meetingOwners[path] = userId;
-                io.to(socket.id).emit('you-are-owner');
-                console.log(`ðŸ‘‘ Meeting owner (first-join fallback): ${userName} (${userId}) for meeting: ${path}`);
-            }
-
-            // Join the socket to a room with the meeting code
+            // -- Edge case: owner set but room empty -> admit directly --
             socket.join(path);
-
-            // Add user to connections array with tracking data
             connections[path].push({
                 socketId: socket.id,
                 userId: userId || null,
@@ -284,27 +331,15 @@ export const connectToSocket = (server) => {
                 totalTime: 0,
                 verifiedTime: 0
             });
-
-            // Track when this user joined
             timeOnline[socket.id] = new Date();
-
-            console.log(`âœ… User ${userName} (${userId}) joined meeting: ${path}. Total users: ${connections[path].length}`);
-
-            // Notify all existing users in the room that a new user joined
             for (let a = 0; a < connections[path].length; a++) {
                 io.to(connections[path][a].socketId).emit("user-joined", socket.id, connections[path].map(u => u.socketId));
             }
-
-            // Send full participant list to everyone in the room
-            const roomParticipants = (connections[path] || []).map(u => ({
-                socketId: u.socketId,
-                userId: u.userId,
-                userName: u.userName,
+            const rp2 = (connections[path] || []).map(u => ({
+                socketId: u.socketId, userId: u.userId, userName: u.userName,
                 hasRaisedHand: (raisedHands[path] || []).some(r => r.socketId === u.socketId),
             }));
-            io.to(path).emit("participant-list", roomParticipants);
-
-            // Send all previous chat messages to the newly joined user
+            io.to(path).emit("participant-list", rp2);
             if (messages[path] !== undefined) {
                 for (let a = 0; a < messages[path].length; ++a) {
                     io.to(socket.id).emit("chat-message", messages[path][a]['data'],
@@ -859,6 +894,16 @@ Requirements:
                 if (wIdx !== -1) {
                     w.splice(wIdx, 1);
                     if (w.length === 0) delete waitingRoom[k];
+                    break;
+                }
+            }
+
+            // Also remove from pendingQueue if they disconnected while waiting
+            for (const [k, q] of Object.entries(pendingQueue)) {
+                const qIdx = q.findIndex(u => u.socketId === socket.id);
+                if (qIdx !== -1) {
+                    q.splice(qIdx, 1);
+                    if (q.length === 0) delete pendingQueue[k];
                     break;
                 }
             }

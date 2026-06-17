@@ -76,16 +76,20 @@ function HomeComponent() {
 
                 <div style={{ display: "flex", alignItems: "center" }}>
                     {/* History button - shows past meetings */}
-                    <IconButton onClick={() => navigate("/history")}>
-                        <RestoreIcon />
-                    </IconButton>
-                    <p>History</p>
+                    <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+                        <IconButton onClick={() => navigate("/history")}>
+                            <RestoreIcon />
+                        </IconButton>
+                        <p>History</p>
+                    </div>
 
                     {/* Analytics button - shows attendance dashboard */}
-                    <IconButton onClick={() => navigate("/attendance-analytics")}>
-                        <BarChartIcon />
-                    </IconButton>
-                    <p>Analytics</p>
+                    <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+                        <IconButton onClick={() => navigate("/attendance-analytics")}>
+                            <BarChartIcon />
+                        </IconButton>
+                        <p>Analytics</p>
+                    </div>
 
                     {/* Logout button - clears token and redirects to auth page */}
                     <Button onClick={() => {

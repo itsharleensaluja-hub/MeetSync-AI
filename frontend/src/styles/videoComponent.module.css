@@ -261,6 +261,7 @@
   font-size: 12px;
   font-weight: 600;
   color: white;
+  line-height: 1;
 }
 
 .ownerBadge {
@@ -281,6 +282,8 @@
 
 .ownerBadge span {
   font-size: 16px;
+  line-height: 1;
+  vertical-align: middle;
 }
 
 .handIndicator {
@@ -360,6 +363,8 @@
   justify-content: center;
   gap: 6px;
 }
+
+.tabButton i { line-height: 1; }
 
 .tabButton:hover {
   color: #645efb;
@@ -729,6 +734,9 @@
 /* Meeting info in bottom bar */
 .meetingInfo {
   color: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .meetingName {
@@ -1184,6 +1192,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  align-self: center;
 }
 
 .pollOptionVoted .pollOptionDot {
@@ -1201,6 +1210,7 @@
   flex: 1;
   font-size: 13px;
   color: #191c1e;
+  align-self: center;
 }
 
 /* Poll Results */
@@ -1407,7 +1417,7 @@
 
 .transcriptEntryMeta {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 6px;
   margin-bottom: 2px;
 }
