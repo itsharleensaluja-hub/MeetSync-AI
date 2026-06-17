@@ -11,6 +11,7 @@
 import { Face } from "../models/face.model.js";
 import { Attendance } from "../models/attendance.model.js";
 import ActionItem from "../models/actionItem.model.js";
+import { Transcript } from "../models/transcript.model.js";
 
 import { Server } from "socket.io";
 import OpenAI from "openai";
@@ -41,6 +42,9 @@ let raisedHands = {};
 // waitingRoom: { 'meeting-code': [{ socketId, userId, userName }] }
 // Users waiting for host approval before entering the meeting
 let waitingRoom = {};
+
+// transcripts: { 'meeting-code': [{text, speaker, lang, timestamp}] }
+let transcripts = {}; // Server-side store for merging across participants
 
 /**
  * Extract structured summary from transcript entries.
@@ -518,13 +522,10 @@ export const connectToSocket = (server) => {
 
             try {
                 await new Attendance(report).save();
-                console.log("âœ… Attendance report saved to database:", report);
-                
-                // Emit to all sockets in the meeting room
-                io.to(meetingId).emit("attendance-report", report);
-                console.log(`ðŸ“¤ Attendance report emitted to room: ${meetingId}`);
+                console.log("✅ Attendance report saved to database:", report);
 
-                // Send special notification to meeting owner
+                io.to(meetingId).emit("attendance-report", report);
+
                 if (owner) {
                     const ownerUser = room.find(u => u.userId === owner);
                     if (ownerUser) {
@@ -532,20 +533,77 @@ export const connectToSocket = (server) => {
                             ...report,
                             message: "As the meeting owner, here is the final attendance report"
                         });
-                        console.log(`ðŸ‘‘ Special owner report sent to: ${owner}`);
                     }
                 }
 
-                // Optional: Clean up face data
                 await Face.deleteMany({ meetingId });
-                console.log(`ðŸ—‘ï¸ Face data cleaned up for meeting: ${meetingId}`);
 
-                // Clean up meeting tracking data
+                // ── AUTO-GENERATE SUMMARY ──────────────────────────────
+                const meetingTranscript = transcripts[meetingId] || [];
+                if (meetingTranscript.length > 0) {
+                    console.log(`🤖 Auto-generating summary: ${meetingTranscript.length} entries`);
+                    const openaiKey = process.env.OPENAI_API_KEY &&
+                        process.env.OPENAI_API_KEY !== "your_openai_api_key_here"
+                        ? process.env.OPENAI_API_KEY : null;
+
+                    let summary;
+                    if (openaiKey) {
+                        try {
+                            const openai = new OpenAI({ apiKey: openaiKey });
+                            const tx = meetingTranscript
+                                .map(e => `[${e.speaker}]: ${e.text}`).join("\n");
+                            const res = await openai.chat.completions.create({
+                                model: "gpt-3.5-turbo",
+                                messages: [
+                                    {
+                                        role: "system",
+                                        content: `Return JSON with exactly these keys:
+executiveSummary, keyDiscussionPoints, decisionsTaken,
+actionItems, risks, nextSteps. Each key is an array of strings
+except executiveSummary which is a string.`
+                                    },
+                                    { role: "user", content: tx }
+                                ],
+                                response_format: { type: "json_object" },
+                                temperature: 0.2,
+                                max_tokens: 2048
+                            });
+                            summary = JSON.parse(res.choices[0].message.content);
+                        } catch (err) {
+                            console.error("GPT auto-summary failed, using fallback:", err.message);
+                            summary = extractSummary(meetingTranscript);
+                        }
+                    } else {
+                        summary = extractSummary(meetingTranscript);
+                    }
+
+                    io.to(meetingId).emit("summary-generated", summary);
+                    console.log(`📋 Auto-summary emitted for ${meetingId}`);
+                    await saveActionItems(meetingId, summary);
+
+                    // ── PERSIST TRANSCRIPT TO MONGODB ──────────────────
+                    try {
+                        await Transcript.findOneAndUpdate(
+                            { meetingId },
+                            { meetingId, entries: meetingTranscript, summary },
+                            { upsert: true, new: true }
+                        );
+                        console.log(`💾 Transcript saved to DB for ${meetingId}`);
+                    } catch (dbErr) {
+                        console.error("Failed to save transcript to DB:", dbErr.message);
+                    }
+                } else {
+                    console.log(`ℹ️ No transcript entries for ${meetingId}, skipping summary`);
+                }
+
+                // ── CLEANUP ────────────────────────────────────────────
                 delete meetingOwners[meetingId];
                 delete meetingStartTimes[meetingId];
                 delete waitingRoom[meetingId];
+                delete transcripts[meetingId];
+
             } catch (err) {
-                console.error("âŒ Error saving attendance:", err);
+                console.error("❌ Error saving attendance:", err);
             }
         });
 
@@ -629,24 +687,44 @@ export const connectToSocket = (server) => {
 
         // ==================== TRANSCRIPT & SUMMARY ====================
 
-        // Relay live transcript entry to all participants
-        socket.on("transcript-entry", ({ meetingId, text, speaker, lang, timestamp }) => {
-            socket.to(meetingId).emit("transcript-entry", { text, speaker, lang, timestamp });
-            console.log(`ðŸ“ Transcript [${meetingId}] ${speaker}: ${text.substring(0, 60)}`);
-        });
+// Store transcript entry on server and relay to all participants
+socket.on("transcript-entry", ({ meetingId, text, speaker, lang, timestamp }) => {
+    // Store on server for merging and persistence
+    if (!transcripts[meetingId]) transcripts[meetingId] = [];
+    transcripts[meetingId].push({ text, speaker, lang, timestamp });
 
-        // Generate AI summary from transcript entries
+    // Broadcast to all other participants in the room
+    socket.to(meetingId).emit("transcript-entry", { text, speaker, lang, timestamp });
+    console.log(`📝 Transcript [${meetingId}] ${speaker}: ${text.substring(0, 60)}`);
+});
+
+        // Generate AI summary from transcript entries (merged server + client)
         socket.on("generate-summary", async ({ meetingId, transcriptEntries }) => {
-            console.log(`ðŸ¤– Generating AI summary for meeting: ${meetingId}`);
+            console.log(`🤖 Generating AI summary for meeting: ${meetingId}`);
+
+            // Merge server-stored entries with any client-sent entries, deduplicate
+            const serverEntries = transcripts[meetingId] || [];
+            const allEntries = [...serverEntries, ...(transcriptEntries || [])];
+            const seen = new Set();
+            const mergedEntries = allEntries
+                .filter(e => {
+                    const key = `${e.timestamp}-${e.speaker}-${(e.text || '').slice(0, 20)}`;
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                })
+                .sort((a, b) => a.timestamp - b.timestamp);
+
+            console.log(`📋 Merged ${mergedEntries.length} entries (server: ${serverEntries.length}, client: ${(transcriptEntries||[]).length})`);
 
             const openaiKey = process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "your_openai_api_key_here"
                 ? process.env.OPENAI_API_KEY
                 : null;
 
-            if (openaiKey && transcriptEntries && transcriptEntries.length > 0) {
+            if (openaiKey && mergedEntries && mergedEntries.length > 0) {
                 try {
                     const openai = new OpenAI({ apiKey: openaiKey });
-                    const transcript = transcriptEntries
+                    const transcript = mergedEntries
                         .map(e => `[${e.speaker || 'Speaker'}]: ${e.text}`)
                         .join('\n');
 
@@ -680,7 +758,7 @@ Requirements:
 
                     const summary = JSON.parse(response.choices[0].message.content);
                     io.to(meetingId).emit("summary-generated", summary);
-                    console.log(`ðŸ“‹ GPT summary generated for ${meetingId}: ${summary.executiveSummary?.substring(0, 80)}...`);
+                    console.log(`📋 GPT summary generated for ${meetingId}: ${summary.executiveSummary?.substring(0, 80)}...`);
                     await saveActionItems(meetingId, summary);
                     return;
                 } catch (err) {
@@ -688,9 +766,9 @@ Requirements:
                 }
             }
 
-            const summary = extractSummary(transcriptEntries);
+            const summary = extractSummary(mergedEntries);
             io.to(meetingId).emit("summary-generated", summary);
-            console.log(`ðŸ“‹ Keyword summary generated for ${meetingId}: ${summary.executiveSummary?.substring(0, 80)}...`);
+            console.log(`📋 Keyword summary generated for ${meetingId}: ${summary.executiveSummary?.substring(0, 80)}...`);
             await saveActionItems(meetingId, summary);
         });
 

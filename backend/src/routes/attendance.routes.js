@@ -5,6 +5,7 @@
 
 import { Router } from "express";
 import { Attendance } from "../models/attendance.model.js";
+import { Transcript } from "../models/transcript.model.js";
 
 const router = Router();
 
@@ -106,6 +107,22 @@ router.get("/user/:userId", async (req, res) => {
             success: false,
             message: "Failed to fetch user attendance records"
         });
+    }
+});
+
+// GET /api/v1/attendance/transcript/:meetingId
+// Returns the saved transcript for a past meeting
+router.get("/transcript/:meetingId", async (req, res) => {
+    try {
+        const { meetingId } = req.params;
+        const record = await Transcript.findOne({ meetingId });
+        if (!record) {
+            return res.status(404).json({ success: false, message: "Transcript not found" });
+        }
+        return res.status(200).json({ success: true, data: record });
+    } catch (error) {
+        console.error("Error fetching transcript:", error);
+        return res.status(500).json({ success: false, message: "Failed to fetch transcript" });
     }
 });
 

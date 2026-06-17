@@ -152,7 +152,7 @@ export default function VideoMeetComponent() {
   const [transcript, setTranscript] = useState([]);
   const [isRecording, setIsRecording] = useState(false);
   const [interimText, setInterimText] = useState('');
-  const [transcriptLang, setTranscriptLang] = useState('en-US');
+  const [transcriptLang, setTranscriptLang] = useState('en-IN');
   const [aiSummary, setAiSummary] = useState(null);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [generatingSummary, setGeneratingSummary] = useState(false);
@@ -1425,6 +1425,29 @@ const enrollFace = async () => {
   };
 
   const startTranscription = async () => {
+    // Check HTTPS — Web Speech API requires secure context
+    const isLocal = window.location.hostname === "localhost" ||
+                    window.location.hostname === "127.0.0.1";
+    if (window.location.protocol !== "https:" && !isLocal) {
+      setTranscriptError(
+        "Speech recognition requires HTTPS. Please access this meeting " +
+        "via a secure (https://) connection."
+      );
+      return;
+    }
+
+    // Check browser support
+    const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setTranscriptError(
+        "Your browser does not support live speech recognition. " +
+        "Please use Google Chrome or Microsoft Edge for best results. " +
+        "You can still type entries manually below."
+      );
+      // Fall through to Transformers.js fallback
+    }
+
     setTranscriptError('');
     setIsRecording(true);
     isRecordingRef.current = true;
@@ -2326,20 +2349,19 @@ const enrollFace = async () => {
                         {transcriptError}
                       </div>
                     )}
-                    {transcriptError.includes('manual entry') && (
-                      <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                        <input
-                          style={{ flex: 1, padding: '6px 10px', border: '1px solid #c6c6cd', borderRadius: 8, fontSize: 12, outline: 'none' }}
-                          placeholder="Type what was said..."
-                          value={manualTranscriptText}
-                          onChange={e => setManualTranscriptText(e.target.value)}
-                          onKeyPress={e => e.key === 'Enter' && addManualEntry()}
-                        />
-                        <button onClick={addManualEntry} style={{ padding: '6px 12px', border: 'none', borderRadius: 8, background: '#645efb', color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                          Add
-                        </button>
-                      </div>
-                    )}
+                    {/* Manual entry — always visible as a fallback */}
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                      <input
+                        style={{ flex: 1, padding: '6px 10px', border: '1px solid #c6c6cd', borderRadius: 8, fontSize: 12, outline: 'none' }}
+                        placeholder="Type transcript entry manually..."
+                        value={manualTranscriptText}
+                        onChange={e => setManualTranscriptText(e.target.value)}
+                        onKeyPress={e => e.key === 'Enter' && addManualEntry()}
+                      />
+                      <button onClick={addManualEntry} style={{ padding: '6px 12px', border: 'none', borderRadius: 8, background: '#645efb', color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                        Add
+                      </button>
+                    </div>
                     <div className={styles.transcriptList}>
                       {transcript.length === 0 && !isRecording && (
                         <p className={styles.emptyStateSmall}>No transcript yet. Press "Start" to record.</p>
