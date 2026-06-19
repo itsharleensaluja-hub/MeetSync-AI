@@ -180,6 +180,7 @@ export default function VideoMeetComponent() {
   useEffect(() => {
     if (video && localVideoref.current && window.localStream) {
       localVideoref.current.srcObject = window.localStream;
+      setTimeout(() => { localVideoref.current?.play().catch(() => {}); }, 50);
     }
   }, [video]);
 
@@ -428,6 +429,7 @@ const enrollFace = async () => {
   useEffect(() => {
     if (!askForUsername && !isWaitingForApproval && localVideoref.current && window.localStream) {
       localVideoref.current.srcObject = window.localStream;
+      setTimeout(() => { localVideoref.current?.play().catch(() => {}); }, 50);
     }
   }, [askForUsername, isWaitingForApproval]);
 
@@ -462,8 +464,14 @@ const enrollFace = async () => {
         console.log(`🎥 Video Track ${idx}:`, track.label, '- Enabled:', track.enabled);
       });
       
-      if (localVideoref.current) localVideoref.current.srcObject = stream;
-      if (lobbyVideoRef.current) lobbyVideoRef.current.srcObject = stream;
+      if (localVideoref.current) {
+        localVideoref.current.srcObject = stream;
+        setTimeout(() => { localVideoref.current?.play().catch(() => {}); }, 50);
+      }
+      if (lobbyVideoRef.current) {
+        lobbyVideoRef.current.srcObject = stream;
+        setTimeout(() => { lobbyVideoRef.current?.play().catch(() => {}); }, 50);
+      }
       setVideoAvailable(true);
       setAudioAvailable(true);
       setAudio(true);  // Enable audio by default
@@ -615,8 +623,14 @@ const enrollFace = async () => {
     setAudio(true);
     setVideo(true);
     
-    if (localVideoref.current) localVideoref.current.srcObject = stream;
-    if (lobbyVideoRef.current) lobbyVideoRef.current.srcObject = stream;
+    if (localVideoref.current) {
+      localVideoref.current.srcObject = stream;
+      setTimeout(() => { localVideoref.current?.play().catch(() => {}); }, 50);
+    }
+    if (lobbyVideoRef.current) {
+      lobbyVideoRef.current.srcObject = stream;
+      setTimeout(() => { lobbyVideoRef.current?.play().catch(() => {}); }, 50);
+    }
 
     // Update existing peer connections with new stream tracks
     for (let id in connections) {
@@ -1129,6 +1143,11 @@ const enrollFace = async () => {
             window.localStream.getAudioTracks().forEach(track => {
               track.enabled = true; // Force enable for transmission
               console.log(`🎤 FORCE ENABLED audio track: ${track.label}`);
+            });
+            
+            window.localStream.getVideoTracks().forEach(track => {
+              track.enabled = true;
+              console.log(`🎥 FORCE ENABLED video track: ${track.label}`);
             });
             
             window.localStream.getTracks().forEach(track => {
@@ -1925,7 +1944,13 @@ const enrollFace = async () => {
             {/* RIGHT: Video Preview */}
             <div className={styles.lobbyPreview}>
               <video
-                ref={lobbyVideoRef}
+                ref={el => {
+                  lobbyVideoRef.current = el;
+                  if (el && window.localStream) {
+                    el.srcObject = window.localStream;
+                    setTimeout(() => { el.play().catch(() => {}); }, 50);
+                  }
+                }}
                 autoPlay
                 muted
                 playsInline
@@ -1981,6 +2006,23 @@ const enrollFace = async () => {
                   </button>
                 </div>
               )}
+            </div>
+            <div className={styles.waitingRoomPreview}>
+              <video
+                ref={el => {
+                  if (el && window.localStream) {
+                    el.srcObject = window.localStream;
+                    setTimeout(() => { el.play().catch(() => {}); }, 50);
+                  }
+                }}
+                autoPlay
+                muted
+                playsInline
+              />
+              <div className={styles.lobbyPreviewLabel}>
+                <span className={styles.lobbyPreviewDot}></span>
+                Camera Preview
+              </div>
             </div>
           </main>
         </div>
@@ -2058,7 +2100,13 @@ const enrollFace = async () => {
               style={{ gridTemplateColumns: `repeat(${gridCols}, 1fr)`, gridTemplateRows: `repeat(${gridRows}, 1fr)` }}>
               {/* Local video */}
               <div className={`${styles.videoTile} ${isMeetingOwner ? styles.speakerGlow : ''} ${screen ? styles.screenShareTile : ''}`}>
-                <video ref={localVideoref} autoPlay muted playsInline className={`${styles.videoElement} ${screen ? styles.screenShareVideo : ''}`}
+                <video ref={el => {
+                  localVideoref.current = el;
+                  if (el && window.localStream) {
+                    el.srcObject = window.localStream;
+                    setTimeout(() => { el.play().catch(() => {}); }, 50);
+                  }
+                }} autoPlay muted playsInline className={`${styles.videoElement} ${screen ? styles.screenShareVideo : ''}`}
                   style={{ display: (video && videoAvailable && window.localStream) ? 'block' : 'none' }} />
                 {(!video || !videoAvailable || !window.localStream) && (
                   <div className={styles.avatarPlaceholder}>
