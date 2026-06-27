@@ -701,6 +701,56 @@
   border: 2px solid #ba1a1a;
 }
 
+.captionsOverlay {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  width: 80%;
+  max-width: 800px;
+  text-align: center;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.captionsText {
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 15px;
+  line-height: 1.5;
+  backdrop-filter: blur(6px);
+  display: inline-block;
+  max-width: 100%;
+  word-wrap: break-word;
+}
+
+.captionsInterim {
+  background: rgba(0, 0, 0, 0.5);
+  color: rgba(255, 255, 255, 0.7);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-style: italic;
+  display: inline-block;
+  max-width: 100%;
+  word-wrap: break-word;
+}
+
+.captionsPlaceholder {
+  background: rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.5);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  display: inline-block;
+}
+
 .leaveButton {
   padding: 12px 24px;
   height: 48px;

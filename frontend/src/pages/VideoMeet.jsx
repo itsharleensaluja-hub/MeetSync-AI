@@ -42,6 +42,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ChecklistIcon from '@mui/icons-material/Checklist';
 import PeopleIcon from '@mui/icons-material/People';
 import HowToVoteIcon from '@mui/icons-material/HowToVote';
+import ClosedCaptionIcon from '@mui/icons-material/ClosedCaption';
 import server from '../environment';
 
 const server_url = server;
@@ -148,6 +149,9 @@ export default function VideoMeetComponent() {
   const [raisedHandUsers, setRaisedHandUsers] = useState([]);
   const [participantList, setParticipantList] = useState([]);
 
+  // Captions/Subtitles state
+  const [showCaptions, setShowCaptions] = useState(false);
+
   const [isWaitingForApproval, setIsWaitingForApproval] = useState(false);
   const [joinRequests, setJoinRequests] = useState([]);
   const [joinRejectedMessage, setJoinRejectedMessage] = useState('');
@@ -175,6 +179,7 @@ export default function VideoMeetComponent() {
   const interimTimeoutRef = useRef(null);
   const webSpeechTriedRef = useRef(false);
   const permissionsPromiseRef = useRef(null);
+  const networkErrorCountRef = useRef(0);
 
   // Ensure local video element gets srcObject whenever video is on
   useEffect(() => {
@@ -1247,6 +1252,8 @@ const enrollFace = async () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return false;
 
+    networkErrorCountRef.current = 0;
+
     // Web Speech API accesses the mic internally — no separate getUserMedia needed.
     // Using window.localStream directly avoids driver contention from two concurrent audio streams.
     speechStreamRef.current = null;
@@ -1294,6 +1301,7 @@ const enrollFace = async () => {
       } else {
         setInterimText('');
       }
+      networkErrorCountRef.current = 0;
       rearmWatchdog();
     };
 
@@ -1304,8 +1312,21 @@ const enrollFace = async () => {
       }
 
       if (event.error === 'network') {
-        console.log('🔁 Web Speech network error — restarting on next onend');
+        networkErrorCountRef.current++;
+        console.log(`🔁 Web Speech network error (${networkErrorCountRef.current}/3)`);
         clearTimeout(speechWatchdogRef.current);
+
+        if (networkErrorCountRef.current >= 3) {
+          console.log('🔄 Web Speech failed, switching to Transformers.js...');
+          recognition.onend = null;
+          recognition.onresult = null;
+          recognition.onerror = null;
+          try { recognition.stop(); } catch (e) {}
+          if (recognitionRef.current === recognition) recognitionRef.current = null;
+          webSpeechTriedRef.current = true;
+          startTransformers();
+          return;
+        }
         return;
       }
 
@@ -1492,6 +1513,7 @@ const enrollFace = async () => {
     setIsRecording(false);
     isRecordingRef.current = false;
     setInterimText('');
+    networkErrorCountRef.current = 0;
 
     if (speechWatchdogRef.current) {
       clearTimeout(speechWatchdogRef.current);
@@ -1856,6 +1878,16 @@ const enrollFace = async () => {
     });
   };
 
+  const toggleCaptions = () => {
+    const newState = !showCaptions;
+    setShowCaptions(newState);
+    if (newState && !isRecording) {
+      startTranscription();
+    } else if (!newState && isRecording) {
+      stopTranscription();
+    }
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'Present': return '#4CAF50';
@@ -2166,6 +2198,26 @@ const enrollFace = async () => {
                 <div className={styles.emptyState}>Waiting for participants...</div>
               )}
             </section>
+
+            {/* Live Captions Overlay */}
+            {showCaptions && (
+              <div className={styles.captionsOverlay}>
+                {transcript.length > 0 ? (
+                  <div className={styles.captionsText}>
+                    {transcript[transcript.length - 1].text}
+                  </div>
+                ) : (
+                  <div className={styles.captionsPlaceholder}>
+                    {isRecording ? 'Listening...' : transcriptError ? 'Subtitles unavailable' : 'Subtitles on'}
+                  </div>
+                )}
+                {isRecording && interimText && (
+                  <div className={styles.captionsInterim}>
+                    {interimText}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* RIGHT SIDEBAR */}
             <aside className={`${styles.sidebar} ${!sidebarOpen ? styles.sidebarClosed : ''}`}>
@@ -2639,6 +2691,9 @@ const enrollFace = async () => {
               </button>
               <button onClick={toggleHandRaise} className={`${styles.controlButton} ${handRaised ? styles.controlActive : ''}`} title={handRaised ? "Lower Hand" : "Raise Hand"}>
                 <PanToolIcon />
+              </button>
+              <button onClick={toggleCaptions} className={`${styles.controlButton} ${showCaptions ? styles.controlActive : ''}`} title={showCaptions ? "Hide Subtitles" : "Show Subtitles"}>
+                <ClosedCaptionIcon />
               </button>
               <button onClick={handleEndCall} className={styles.leaveButton} title={isMeetingOwner ? "End Meeting & Generate Report" : "Leave Meeting"}>
                 <CallEndIcon />
