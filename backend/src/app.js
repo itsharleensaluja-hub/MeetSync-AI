@@ -24,6 +24,7 @@ dotenv.config(); // Load environment variables from .env file
 import userRoutes from "./routes/users.routes.js"; // User authentication routes
 import attendanceRoutes from "./routes/attendance.routes.js"; // Attendance report routes
 import actionItemRoutes from "./routes/actionItem.routes.js"; // Action item routes
+import memoryRoutes from "./routes/memory.routes.js"; // Thread memory routes
 
 // ES modules equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -90,6 +91,7 @@ app.use("/api/v1/users", userRoutes);
 // All attendance-related endpoints (reports, owner reports) are prefixed with /api/v1/attendance
 app.use("/api/v1/attendance", attendanceRoutes);
 app.use("/api/v1/action-items", actionItemRoutes);
+app.use("/api/v1/memory", memoryRoutes);
 
 // SERVE FRONTEND STATIC FILES IN PRODUCTION
 // This serves the React build files when deployed

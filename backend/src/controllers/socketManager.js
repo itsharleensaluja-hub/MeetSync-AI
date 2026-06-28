@@ -12,6 +12,7 @@ import { Face } from "../models/face.model.js";
 import { Attendance } from "../models/attendance.model.js";
 import ActionItem from "../models/actionItem.model.js";
 import { Transcript } from "../models/transcript.model.js";
+import { ThreadMemory } from "../models/threadMemory.model.js";
 
 import { Server } from "socket.io";
 import OpenAI from "openai";
@@ -213,6 +214,96 @@ async function saveActionItems(meetingId, summary) {
     }
 }
 
+/**
+ * Compute a thread ID from a meeting code prefix and participant set.
+ * Hybrid approach: uses the meeting code prefix (first segment before / or -)
+ * combined with a hash of sorted participant user IDs.
+ */
+function computeThreadId(meetCode, participants) {
+  const prefix = (meetCode || '').split(/[/-]/)[0] || meetingCode;
+  const userIds = (participants || [])
+    .map(p => p.userId || '')
+    .filter(Boolean)
+    .sort();
+  const hash = userIds.join(',');
+  return `${prefix}::${hash}`;
+}
+
+/**
+ * Save or update ThreadMemory after a meeting ends.
+ * Carries forward unresolved action items and appends decisions.
+ */
+async function saveThreadMemory(meetingId, participants, summary, decisionsList, actionItemsFromSummary) {
+  try {
+    const participantSet = (participants || []).map(p => ({
+      userIds: [p.userId].filter(Boolean),
+      userNames: [p.userName || p.userId].filter(Boolean),
+    }));
+
+    const threadId = computeThreadId(meetingId, participants);
+
+    const existing = await ThreadMemory.findOne({ threadId });
+
+    // Build pending action items from action items returned by summary
+    const newActionItems = (actionItemsFromSummary || []).map(task => ({
+      task: typeof task === 'string' ? task : (task.task || ''),
+      assignedTo: task.assignedTo || 'Unassigned',
+      sourceMeetingCode: meetingId,
+    }));
+
+    // Build decisions from in-memory decisions or from summary
+    const newDecisions = (decisionsList || []).map(d => ({
+      text: typeof d === 'string' ? d : (d.text || ''),
+      proposedBy: d.proposedBy || '',
+      timestamp: d.timestamp || new Date().toISOString(),
+      meetingCode: meetingId,
+    }));
+
+    if (existing) {
+      // Carry forward only unresolved (pending) action items
+      const existingPending = (existing.pendingActionItems || [])
+        .filter(a => !a._status_completed);
+
+      // Merge: replace items from same meeting code, add new ones
+      const mergedItems = [
+        ...existingPending.filter(a => a.sourceMeetingCode !== meetingId),
+        ...newActionItems,
+      ];
+
+      existing.meetingCodes = [...new Set([...existing.meetingCodes, meetingId])];
+      existing.participantSets = [
+        ...existing.participantSets.filter(
+          ps => JSON.stringify(ps.userIds.sort()) !== JSON.stringify(participantSet[0]?.userIds?.sort())
+        ),
+        ...participantSet,
+      ].slice(-10);
+      if (summary && summary.executiveSummary) {
+        existing.summary = summary.executiveSummary;
+      }
+      existing.pendingActionItems = mergedItems;
+      existing.pastDecisions = [...(existing.pastDecisions || []), ...newDecisions];
+      existing.lastMeetingEnded = new Date();
+
+      await existing.save();
+      console.log(`🧠 ThreadMemory updated for thread ${threadId}`);
+    } else {
+      await new ThreadMemory({
+        threadId,
+        meetingCodes: [meetingId],
+        participantSets: participantSet,
+        summary: summary?.executiveSummary || '',
+        pendingActionItems: newActionItems,
+        pastDecisions: newDecisions,
+        patterns: summary?.risks || [],
+        lastMeetingEnded: new Date(),
+      }).save();
+      console.log(`🧠 ThreadMemory created for thread ${threadId}`);
+    }
+  } catch (err) {
+    console.error('Failed to save thread memory:', err.message);
+  }
+}
+
 export const connectToSocket = (server) => {
     // Initialize Socket.io server with CORS configuration
     const io = new Server(server, {
@@ -278,6 +369,11 @@ export const connectToSocket = (server) => {
                     for (let a = 0; a < messages[path].length; ++a) {
                         io.to(socket.id).emit("chat-message", messages[path][a]['data'],
                             messages[path][a]['sender'], messages[path][a]['socket-id-sender']);
+                    }
+                }
+                if (transcripts[path] !== undefined) {
+                    for (let a = 0; a < transcripts[path].length; ++a) {
+                        io.to(socket.id).emit("transcript-entry", transcripts[path][a]);
                     }
                 }
                 // Drain pendingQueue into waitingRoom, notify owner
@@ -346,6 +442,11 @@ export const connectToSocket = (server) => {
                         messages[path][a]['sender'], messages[path][a]['socket-id-sender']);
                 }
             }
+            if (transcripts[path] !== undefined) {
+                for (let a = 0; a < transcripts[path].length; ++a) {
+                    io.to(socket.id).emit("transcript-entry", transcripts[path][a]);
+                }
+            }
         });
 
         // EVENT: Owner approves a waiting user
@@ -393,6 +494,11 @@ export const connectToSocket = (server) => {
                 for (let a = 0; a < messages[meetingId].length; ++a) {
                     io.to(waiter.socketId).emit("chat-message", messages[meetingId][a]['data'],
                         messages[meetingId][a]['sender'], messages[meetingId][a]['socket-id-sender']);
+                }
+            }
+            if (transcripts[meetingId] !== undefined) {
+                for (let a = 0; a < transcripts[meetingId].length; ++a) {
+                    io.to(waiter.socketId).emit("transcript-entry", transcripts[meetingId][a]);
                 }
             }
 
@@ -627,6 +733,15 @@ except executiveSummary which is a string.`
                     } catch (dbErr) {
                         console.error("Failed to save transcript to DB:", dbErr.message);
                     }
+
+                    // ── SAVE THREAD MEMORY ─────────────────────────────
+                    const roomParticipants = room.map(u => ({
+                        userId: u.userId,
+                        userName: u.userName,
+                    }));
+                    const decisionsList = report.decisions || [];
+                    const actionItemsFromSummary = summary?.actionItems || [];
+                    await saveThreadMemory(meetingId, roomParticipants, summary, decisionsList, actionItemsFromSummary);
                 } else {
                     console.log(`ℹ️ No transcript entries for ${meetingId}, skipping summary`);
                 }
@@ -828,6 +943,116 @@ Requirements:
                 io.to(meetingId).emit("action-item-updated", item);
             } catch (err) {
                 console.error('Failed to toggle action item:', err.message);
+            }
+        });
+
+        // ==================== MEMORY EVENTS ====================
+
+        // Save thread memory explicitly (from client after summary generated)
+        socket.on("save-thread-memory", async ({ meetingId, participants, summary, actionItems, decisions }) => {
+            console.log(`🧠 Saving thread memory for meeting: ${meetingId}`);
+            const room = connections[meetingId];
+            const participantsForMemory = (participants && participants.length > 0)
+                ? participants
+                : (room || []).map(u => ({ userId: u.userId, userName: u.userName }));
+
+            await saveThreadMemory(meetingId, participantsForMemory, summary, decisions, actionItems);
+        });
+
+        // Get thread memory briefing for the lobby card
+        socket.on("get-thread-memory", async ({ meetingCode, participants }) => {
+            try {
+                const prefix = (meetingCode || '').split(/[/-]/)[0] || meetingCode;
+                const userIds = (participants || []).map(p => p.userId || '').filter(Boolean).sort();
+
+                // Search by prefix match
+                const allThreads = await ThreadMemory.find({});
+                let matched = null;
+
+                // First: try exact threadId match
+                const candidateId = computeThreadId(meetingCode, participants || []);
+                matched = allThreads.find(t => t.threadId === candidateId);
+
+                // Second: try prefix match
+                if (!matched) {
+                    matched = allThreads.find(t => t.threadId.startsWith(prefix + '::'));
+                }
+
+                // Third: try participant set overlap (>50%)
+                if (!matched && userIds.length > 0) {
+                    let bestOverlap = 0;
+                    for (const t of allThreads) {
+                        for (const ps of (t.participantSets || [])) {
+                            const storedIds = (ps.userIds || []).filter(Boolean);
+                            if (storedIds.length === 0) continue;
+                            const overlap = storedIds.filter(id => userIds.includes(id)).length;
+                            const ratio = overlap / Math.max(storedIds.length, userIds.length);
+                            if (ratio > bestOverlap) {
+                                bestOverlap = ratio;
+                                matched = t;
+                            }
+                        }
+                    }
+                }
+
+                if (matched) {
+                    socket.emit("thread-memory-result", {
+                        threadId: matched.threadId,
+                        summary: matched.summary,
+                        pendingActionItems: matched.pendingActionItems || [],
+                        pastDecisions: (matched.pastDecisions || []).slice(-5),
+                        lastMeetingEnded: matched.lastMeetingEnded,
+                        previousMeetingCount: (matched.meetingCodes || []).length,
+                    });
+                } else {
+                    socket.emit("thread-memory-result", null);
+                }
+            } catch (err) {
+                console.error('Failed to get thread memory:', err.message);
+                socket.emit("thread-memory-result", null);
+            }
+        });
+
+        // Get meeting context for the Info tab during a meeting
+        socket.on("get-meeting-context", async ({ meetingCode }) => {
+            try {
+                const room = connections[meetingCode];
+                const participants = (room || []).map(u => ({ userId: u.userId, userName: u.userName }));
+                const prefix = (meetingCode || '').split(/[/-]/)[0] || meetingCode;
+
+                // Find the most relevant thread
+                const allThreads = await ThreadMemory.find({});
+                let matched = allThreads.find(t => t.threadId.startsWith(prefix + '::'));
+                if (!matched && participants.length > 0) {
+                    const userIds = participants.map(p => p.userId).filter(Boolean);
+                    let bestOverlap = 0;
+                    for (const t of allThreads) {
+                        for (const ps of (t.participantSets || [])) {
+                            const storedIds = (ps.userIds || []).filter(Boolean);
+                            if (storedIds.length === 0) continue;
+                            const overlap = storedIds.filter(id => userIds.includes(id)).length;
+                            const ratio = overlap / Math.max(storedIds.length, userIds.length);
+                            if (ratio > bestOverlap) {
+                                bestOverlap = ratio;
+                                matched = t;
+                            }
+                        }
+                    }
+                }
+
+                if (matched) {
+                    socket.emit("meeting-context-result", {
+                        pendingActionItems: (matched.pendingActionItems || []).filter(a => !a._status_completed),
+                        pastDecisions: (matched.pastDecisions || []).slice(-5),
+                        summary: matched.summary,
+                        previousMeetingCount: (matched.meetingCodes || []).length,
+                    });
+                } else {
+                    socket.emit("meeting-context-result", null);
+                }
+            } catch (err) {
+                console.error('Failed to get meeting context:', err.message);
+                socket.emit("meeting-context-result", null);
             }
         });
 

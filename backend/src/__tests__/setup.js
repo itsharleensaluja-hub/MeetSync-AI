@@ -127,6 +127,7 @@ export const MockMeeting = createMockModel(stores['meetings'] = makeStore());
 export const MockAttendance = createMockModel(stores['attendances'] = makeStore());
 export const MockTranscript = createMockModel(stores['transcripts'] = makeStore());
 export const MockActionItem = createMockModel(stores['actionItems'] = makeStore());
+export const MockThreadMemory = createMockModel(stores['threadMemories'] = makeStore());
 
 // ── Mock model modules ─────────────────────────────
 jest.unstable_mockModule('../models/user.model.js', () => ({ User: MockUser }));
@@ -134,6 +135,7 @@ jest.unstable_mockModule('../models/meeting.model.js', () => ({ Meeting: MockMee
 jest.unstable_mockModule('../models/attendance.model.js', () => ({ Attendance: MockAttendance }));
 jest.unstable_mockModule('../models/transcript.model.js', () => ({ Transcript: MockTranscript }));
 jest.unstable_mockModule('../models/actionItem.model.js', () => ({ default: MockActionItem }));
+jest.unstable_mockModule('../models/threadMemory.model.js', () => ({ ThreadMemory: MockThreadMemory }));
 
 // ── Reset helper ───────────────────────────────────
 export function resetStore() {

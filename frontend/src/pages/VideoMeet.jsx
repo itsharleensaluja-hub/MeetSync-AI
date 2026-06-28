@@ -168,6 +168,11 @@ export default function VideoMeetComponent() {
   const [transcriptLoading, setTranscriptLoading] = useState('');
   const [manualTranscriptText, setManualTranscriptText] = useState('');
   const [actionItems, setActionItems] = useState([]);
+
+  // Thread Memory state (lobby card + info tab)
+  const [threadMemory, setThreadMemory] = useState(null);
+  const [meetingContext, setMeetingContext] = useState(null);
+
   const mediaRecorderRef = useRef(null);
   const isRecordingRef = useRef(false);
   const flushTimerRef = useRef(null);
@@ -205,6 +210,30 @@ export default function VideoMeetComponent() {
 
   // Extract just the room code from URL path (e.g., "/abc123" -> "abc123")
   const meetingCode = window.location.pathname.substring(1) || 'unknown-room';
+
+  // Fetch meeting context when Info tab becomes active
+  useEffect(() => {
+    if (activeTab === 'info' && socketRef.current?.connected) {
+      socketRef.current.emit('get-meeting-context', { meetingCode });
+    }
+  }, [activeTab, meetingCode]);
+
+  // Fetch thread memory when lobby is shown
+  useEffect(() => {
+    if (askForUsername) {
+      const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:8000';
+      fetch(`${serverUrl}/api/v1/memory/thread/${meetingCode}`)
+        .then(r => r.json())
+        .then(res => {
+          if (res.success && res.data) {
+            setThreadMemory(res.data);
+          } else {
+            setThreadMemory(null);
+          }
+        })
+        .catch(() => setThreadMemory(null));
+    }
+  }, [askForUsername, meetingCode]);
 
   // Load face-api models from CDN [web:52]
   useEffect(() => {
@@ -1013,6 +1042,14 @@ const enrollFace = async () => {
         setGeneratingSummary(false);
         setShowSummaryModal(true);
         socketRef.current?.emit('get-action-items', { meetingId: meetingCode });
+        // Persist thread memory after summary
+        socketRef.current?.emit('save-thread-memory', {
+          meetingId: meetingCode,
+          participants: participantList.map(p => ({ userId: p.userId, userName: p.userName })),
+          summary,
+          actionItems: summary?.actionItems || [],
+          decisions: summary?.decisionsTaken || [],
+        });
       });
 
       socketRef.current.on('action-items-list', (items) => {
@@ -1021,6 +1058,15 @@ const enrollFace = async () => {
 
       socketRef.current.on('action-item-updated', (item) => {
         setActionItems(prev => prev.map(a => a._id === item._id ? item : a));
+      });
+
+      // Thread Memory events
+      socketRef.current.on('thread-memory-result', (memory) => {
+        setThreadMemory(memory);
+      });
+
+      socketRef.current.on('meeting-context-result', (context) => {
+        setMeetingContext(context);
       });
 
       socketRef.current.on('hand-raise-update', (users) => {
@@ -1070,6 +1116,9 @@ const enrollFace = async () => {
           console.log('✅ Host approved you! Joining the meeting...');
           waitingForApprovalRef.current = false;
           setIsWaitingForApproval(false);
+          if (!isRecordingRef.current) {
+            setTimeout(() => startTranscription(), 1500);
+          }
         }
         
         clients.forEach(socketListId => {
@@ -1973,6 +2022,37 @@ const enrollFace = async () => {
               </button>
             </div>
 
+            {/* MIDDLE: Memory Card */}
+            {threadMemory && (
+              <div className={styles.lobbyCard} style={{ maxWidth: 300 }}>
+                <div style={{ padding: '12px 16px', background: 'linear-gradient(135deg, #667eea, #764ba2)', borderRadius: '12px 12px 0 0', color: '#fff' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <PsychologyIcon sx={{ fontSize: 20 }} />
+                    <span style={{ fontWeight: 700, fontSize: 14 }}>Previous Meeting Recap</span>
+                  </div>
+                  {threadMemory.previousMeetingCount > 0 && (
+                    <span style={{ fontSize: 11, opacity: 0.8 }}>From {threadMemory.previousMeetingCount} past meeting{threadMemory.previousMeetingCount !== 1 ? 's' : ''}</span>
+                  )}
+                </div>
+                <div style={{ padding: '12px 16px', background: '#fff', borderRadius: '0 0 12px 12px' }}>
+                  {threadMemory.summary && (
+                    <p style={{ fontSize: 12, color: '#45464d', lineHeight: 1.5, margin: 0 }}>{threadMemory.summary}</p>
+                  )}
+                  {threadMemory.pendingActionItems && threadMemory.pendingActionItems.length > 0 && (
+                    <div style={{ marginTop: 10 }}>
+                      <p style={{ fontSize: 11, fontWeight: 700, color: '#191c1e', marginBottom: 6 }}>Pending Tasks</p>
+                      {threadMemory.pendingActionItems.slice(0, 3).map((item, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 4 }}>
+                          <span style={{ color: '#FF9800', fontSize: 12, marginTop: 1 }}>⏳</span>
+                          <span style={{ fontSize: 11, color: '#45464d' }}>{typeof item === 'string' ? item : item.task}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* RIGHT: Video Preview */}
             <div className={styles.lobbyPreview}>
               <video
@@ -2560,6 +2640,49 @@ const enrollFace = async () => {
                         <li>Attendance is based on face detection percentage</li>
                       </ul>
                     </div>
+
+                    {/* Thread Memory Section */}
+                    {meetingContext && (
+                      <div style={{ marginTop: 16, padding: 12, background: '#ede7f6', borderRadius: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                          <PsychologyIcon sx={{ fontSize: 18, color: '#5e35b1' }} />
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#5e35b1' }}>Meeting Memory</span>
+                          {meetingContext.previousMeetingCount > 0 && (
+                            <span style={{ fontSize: 11, color: '#7e57c2' }}>({meetingContext.previousMeetingCount} previous)</span>
+                          )}
+                        </div>
+
+                        {meetingContext.summary && (
+                          <p style={{ fontSize: 12, color: '#45464d', lineHeight: 1.5, marginBottom: 10 }}>
+                            {meetingContext.summary}
+                          </p>
+                        )}
+
+                        {meetingContext.pendingActionItems && meetingContext.pendingActionItems.length > 0 && (
+                          <div style={{ marginBottom: 10 }}>
+                            <p style={{ fontSize: 11, fontWeight: 700, color: '#333', marginBottom: 6 }}>Carry-over Tasks</p>
+                            {meetingContext.pendingActionItems.slice(0, 4).map((item, i) => (
+                              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 3 }}>
+                                <span style={{ color: '#FF9800', fontSize: 11, marginTop: 1 }}>⏳</span>
+                                <span style={{ fontSize: 11, color: '#555' }}>{typeof item === 'string' ? item : item.task}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {meetingContext.pastDecisions && meetingContext.pastDecisions.length > 0 && (
+                          <div>
+                            <p style={{ fontSize: 11, fontWeight: 700, color: '#333', marginBottom: 6 }}>Past Decisions</p>
+                            {meetingContext.pastDecisions.map((d, i) => (
+                              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 3 }}>
+                                <span style={{ color: '#2E7D32', fontSize: 11, marginTop: 1 }}>✓</span>
+                                <span style={{ fontSize: 11, color: '#555' }}>{typeof d === 'string' ? d : d.text}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 

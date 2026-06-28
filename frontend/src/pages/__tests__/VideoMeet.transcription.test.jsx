@@ -19,10 +19,23 @@ jest.mock('@vladmandic/face-api', () => ({
 }));
 
 // The component calls io.connect(), not io()
-const mockSocket = { on: jest.fn(), emit: jest.fn(), off: jest.fn(), connect: jest.fn(), disconnect: jest.fn(), id: 'mock-socket-id' };
-const mockIo = jest.fn(() => mockSocket);
-mockIo.connect = jest.fn(() => mockSocket);
-jest.mock('socket.io-client', () => mockIo);
+// Use a mutable holder so beforeEach can re-create mock methods after clearAllMocks
+const mockSocket = { on: null, emit: null, off: null, connect: null, disconnect: null, id: 'mock-socket-id' };
+function initMockSocket() {
+  mockSocket.on = jest.fn(() => mockSocket);
+  mockSocket.emit = jest.fn(() => mockSocket);
+  mockSocket.off = jest.fn(() => mockSocket);
+  mockSocket.connect = jest.fn(() => mockSocket);
+  mockSocket.disconnect = jest.fn();
+  return mockSocket;
+}
+initMockSocket();
+
+jest.mock('socket.io-client', () => {
+  const io = (url, opts) => mockSocket;
+  io.connect = (url, opts) => mockSocket;
+  return io;
+});
 
 const mockNavigate = jest.fn();
 jest.mock('react-router-dom', () => ({
@@ -52,7 +65,10 @@ function buildRecognition() {
   };
 }
 
-function triggerSocketConnect() {
+async function triggerSocketConnect() {
+  await waitFor(() => {
+    expect(mockSocket.on).toHaveBeenCalledWith('connect', expect.any(Function));
+  });
   const connectHandler = mockSocket.on.mock.calls.find(c => c[0] === 'connect')?.[1];
   if (connectHandler) act(() => connectHandler());
 }
@@ -60,14 +76,17 @@ function triggerSocketConnect() {
 beforeEach(() => {
   jest.clearAllMocks();
 
+  // Re-assert mock implementations (clearAllMocks may reset these on some Jest versions)
+  mockGetUserMedia.mockResolvedValue(mockStream);
+  mockPipelineFn.mockResolvedValue({ text: 'hello world' });
+
+  // Re-init socket mock methods after clearAllMocks
+  initMockSocket();
+
   recognition = buildRecognition();
   recognitionCtor = jest.fn(() => recognition);
   window.SpeechRecognition = recognitionCtor;
   window.webkitSpeechRecognition = recognitionCtor;
-
-  // Reset io mock to return fresh mockSocket (its fns were cleared above)
-  mockIo.mockReturnValue(mockSocket);
-  mockIo.connect.mockReturnValue(mockSocket);
 
   Object.defineProperty(navigator, 'mediaDevices', {
     value: { getUserMedia: mockGetUserMedia, getDisplayMedia: jest.fn().mockResolvedValue(mockStream) },
@@ -91,8 +110,6 @@ beforeEach(() => {
     close: jest.fn(),
   }));
   window.webkitAudioContext = undefined;
-
-  mockPipelineFn.mockResolvedValue({ text: 'hello world' });
 
   delete window.location;
   window.location = {
@@ -243,7 +260,9 @@ describe('startWebSpeech() - onerror', () => {
     fireRecognitionError('network');
     fireRecognitionError('network');
     expect(recognition.stop).toHaveBeenCalled();
-    expect(window.MediaRecorder).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(window.MediaRecorder).toHaveBeenCalled();
+    });
   });
 
   test('other error sets transcriptError and stops recording', async () => {
@@ -430,7 +449,8 @@ describe('Socket event handlers', () => {
   test('handles incoming transcript-entry', async () => {
     renderVideoMeet();
     await joinMeeting();
-    triggerSocketConnect();
+    await triggerSocketConnect();
+    await userEvent.click(screen.getByText('Transcript'));
     await waitFor(() => {
       expect(mockSocket.on).toHaveBeenCalledWith('transcript-entry', expect.any(Function));
     });
@@ -438,13 +458,15 @@ describe('Socket event handlers', () => {
     act(() => {
       handler({ text: 'Remote entry', speaker: 'Remote User', lang: 'en', timestamp: Date.now() });
     });
-    expect(screen.getByText('Remote entry')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Remote entry')).toBeInTheDocument();
+    });
   });
 
   test('handles incoming summary-generated', async () => {
     renderVideoMeet();
     await joinMeeting();
-    triggerSocketConnect();
+    await triggerSocketConnect();
     await waitFor(() => {
       expect(mockSocket.on).toHaveBeenCalledWith('summary-generated', expect.any(Function));
     });
@@ -460,7 +482,7 @@ describe('Socket event handlers', () => {
   test('handles incoming action-item-updated', async () => {
     renderVideoMeet();
     await joinMeeting();
-    triggerSocketConnect();
+    await triggerSocketConnect();
     await waitFor(() => {
       expect(mockSocket.on).toHaveBeenCalledWith('action-item-updated', expect.any(Function));
     });
