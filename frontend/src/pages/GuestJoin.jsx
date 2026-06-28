@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import "../App.css";
 import { Button, TextField } from '@mui/material';
+import Logo from '../components/Logo';
 
 export default function GuestJoin() {
 
@@ -25,7 +26,8 @@ export default function GuestJoin() {
     return (
         <>
             <div className="navBar">
-                <div style={{ display: "flex", alignItems: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <Logo size={32} />
                     <h2>MeetSync AI</h2>
                 </div>
                 <div style={{ display: "flex", alignItems: "center" }}>
@@ -54,7 +56,7 @@ export default function GuestJoin() {
                     </div>
                 </div>
                 <div className='rightPanel'>
-                    <img srcSet='/logo3.png' alt="" />
+                    <Logo size={200} />
                 </div>
             </div>
         </>

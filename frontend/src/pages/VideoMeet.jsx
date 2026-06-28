@@ -32,7 +32,7 @@ import MicOffIcon from '@mui/icons-material/MicOff';
 import ScreenShareIcon from '@mui/icons-material/ScreenShare';
 import StopScreenShareIcon from '@mui/icons-material/StopScreenShare';
 import ChatIcon from '@mui/icons-material/Chat';
-import PsychologyIcon from '@mui/icons-material/Psychology';
+import Logo from '../components/Logo';
 import AnalyticsIcon from '@mui/icons-material/Analytics';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import SearchIcon from '@mui/icons-material/Search';
@@ -1970,7 +1970,7 @@ const enrollFace = async () => {
           <header className={styles.topNav}>
             <div className={styles.topNavLeft}>
               <div className={styles.logoIcon}>
-                <PsychologyIcon />
+                <Logo size={24} />
               </div>
               <h1 className={styles.navTitle}>MeetSync AI</h1>
               <div className={styles.navDivider}></div>
@@ -1985,7 +1985,7 @@ const enrollFace = async () => {
             {/* LEFT: Join Card */}
             <div className={styles.lobbyCard}>
               <div className={styles.lobbyBrandBadge}>
-                <PsychologyIcon />
+                <Logo size={24} />
               </div>
               <h2 className={styles.lobbyCardTitle}>Join Your Meeting</h2>
               <p className={styles.lobbyCardSub}>Enter your name to join the room</p>
@@ -2079,7 +2079,7 @@ const enrollFace = async () => {
           <header className={styles.topNav}>
             <div className={styles.topNavLeft}>
               <div className={styles.logoIcon}>
-                <PsychologyIcon />
+                <Logo size={24} />
               </div>
               <h1 className={styles.navTitle}>MeetSync AI</h1>
               <div className={styles.navDivider}></div>
@@ -2144,7 +2144,7 @@ const enrollFace = async () => {
           <header className={styles.topNav}>
             <div className={styles.topNavLeft}>
               <div className={styles.logoIcon}>
-                <PsychologyIcon />
+                <Logo size={24} />
               </div>
               <h1 className={styles.navTitle}>MeetSync AI</h1>
               <div className={styles.navDivider}></div>

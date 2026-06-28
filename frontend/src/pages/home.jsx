@@ -17,6 +17,7 @@ import "../App.css";
 import { Button, IconButton, TextField } from '@mui/material';
 import RestoreIcon from '@mui/icons-material/Restore';
 import BarChartIcon from '@mui/icons-material/BarChart';
+import Logo from '../components/Logo';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { AuthContext } from '../contexts/AuthContext';
 
@@ -70,7 +71,8 @@ function HomeComponent() {
             {/* Navigation Bar */}
             <div className="navBar">
 
-                <div style={{ display: "flex", alignItems: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <Logo size={32} />
                     <h2>MeetSync AI</h2>
                 </div>
 
@@ -162,7 +164,7 @@ function HomeComponent() {
                 </div>
                 {/* Right panel with image */}
                 <div className='rightPanel'>
-                    <img srcSet='/logo3.png' alt="" />
+                    <Logo size={200} />
                 </div>
             </div>
         </>

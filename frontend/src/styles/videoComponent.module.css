@@ -27,7 +27,6 @@
 }
 
 .logoIcon {
-  background: #645efb;
   padding: 4px;
   border-radius: 12px;
   display: flex;
@@ -35,11 +34,6 @@
   justify-content: center;
   width: 36px;
   height: 36px;
-}
-
-.logoIcon svg {
-  color: white;
-  font-size: 24px;
 }
 
 .navTitle {

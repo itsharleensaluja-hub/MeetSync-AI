@@ -12,6 +12,7 @@
 import React from 'react'
 import "../App.css"
 import { Link, useNavigate } from 'react-router-dom'
+import Logo from '../components/Logo'
 
 export default function LandingPage() {
 
@@ -21,7 +22,8 @@ export default function LandingPage() {
         <div className='landingPageContainer'>
             {/* Navigation Bar */}
             <nav>
-                <div className='navHeader'>
+                <div className='navHeader' style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <Logo size={32} />
                     <h2>MeetSync AI</h2>
                 </div>
                 <div className='navlist'>
