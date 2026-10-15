@@ -1,6 +1,7 @@
 /**
  * VIDEO MEET COMPONENT - VideoMeet.jsx (FINAL FIXED)
  */
+import PsychologyIcon from '@mui/icons-material/Psychology';
 
 import * as faceapi from '@vladmandic/face-api';
 import {
@@ -42,6 +43,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ChecklistIcon from '@mui/icons-material/Checklist';
 import PeopleIcon from '@mui/icons-material/People';
 import HowToVoteIcon from '@mui/icons-material/HowToVote';
+import PsychologyIcon from '@mui/icons-material/Psychology';
 import ClosedCaptionIcon from '@mui/icons-material/ClosedCaption';
 import server from '../environment';
 
