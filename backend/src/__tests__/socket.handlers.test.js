@@ -113,6 +113,23 @@ describe('Chat Messaging', () => {
   }, 20000);
 });
 
+describe('Meeting lifecycle', () => {
+  test('a participant leaving does not end the meeting for the owner', async () => {
+    const room = roomId();
+    const { owner, joiner } = await setupTwoUsers(room);
+    const reportPromise = new Promise(resolve => {
+      owner.once('attendance-report', resolve);
+      setTimeout(() => resolve(null), 500);
+    });
+
+    joiner.emit('end-meeting', { meetingId: room });
+
+    await expect(reportPromise).resolves.toBeNull();
+    await disconnect(joiner);
+    await disconnect(owner);
+  }, 20000);
+});
+
 describe('Transcription', () => {
   test('relays transcript entry to other users', async () => {
     const room = roomId();

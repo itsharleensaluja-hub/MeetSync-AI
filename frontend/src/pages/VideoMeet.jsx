@@ -94,6 +94,7 @@ export default function VideoMeetComponent() {
   // Refs
   const socketRef = useRef();
   const socketIdRef = useRef();
+  const remoteStreamsRef = useRef({});
   const localVideoref = useRef();  // main in‑call video
   const lobbyVideoRef = useRef();  // lobby preview
   const modalVideoRef = useRef();  // enrollment video
@@ -104,6 +105,7 @@ export default function VideoMeetComponent() {
   const [audioAvailable, setAudioAvailable] = useState(true);
   const [video, setVideo] = useState(true);
   const [audio, setAudio] = useState(true);
+  const audioStateRef = useRef(true);
   const [screen, setScreen] = useState(false);
   const [screenAvailable, setScreenAvailable] = useState(false);
   const [screenSharingSockets, setScreenSharingSockets] = useState([]);
@@ -154,6 +156,7 @@ export default function VideoMeetComponent() {
   const [showCaptions, setShowCaptions] = useState(false);
 
   const [isWaitingForApproval, setIsWaitingForApproval] = useState(false);
+  const [socketConnected, setSocketConnected] = useState(false);
   const [joinRequests, setJoinRequests] = useState([]);
   const [joinRejectedMessage, setJoinRejectedMessage] = useState('');
 
@@ -491,7 +494,7 @@ const enrollFace = async () => {
       console.log('✅ Got', audioTracks.length, 'audio track(s) and', videoTracks.length, 'video track(s)');
       
       audioTracks.forEach((track, idx) => {
-        track.enabled = true;
+        track.enabled = audioStateRef.current;
         console.log(`🎤 Audio Track ${idx}:`, track.label, '- Enabled:', track.enabled);
       });
       videoTracks.forEach((track, idx) => {
@@ -509,7 +512,7 @@ const enrollFace = async () => {
       }
       setVideoAvailable(true);
       setAudioAvailable(true);
-      setAudio(true);  // Enable audio by default
+      setAudio(audioStateRef.current);
       setVideo(true);  // Enable video by default
       console.log('✅ Media permissions granted and tracks enabled');
       console.log('🎤 Audio tracks:', stream.getAudioTracks().map(t => ({ label: t.label, enabled: t.enabled })));
@@ -551,6 +554,9 @@ const enrollFace = async () => {
     }
     console.log('✅ Media ready. Connecting to socket server...');
     console.log('🎤 Audio tracks:', window.localStream.getAudioTracks().length);
+    const videoTracks = window.localStream.getVideoTracks();
+    setVideoAvailable(videoTracks.length > 0);
+    setVideo(videoTracks.some(track => track.readyState === 'live' && track.enabled));
     connectToSocketServer();
   };
 
@@ -559,20 +565,19 @@ const enrollFace = async () => {
     for (let id in connections) {
       if (id === socketIdRef.current) continue;
       const senders = connections[id].getSenders();
-      const hasAudio = senders.some(s => s.track?.kind === 'audio');
-      const hasVideo = senders.some(s => s.track?.kind === 'video');
-      if (hasAudio && hasVideo) continue;
       console.log(`🔗 Attaching late local tracks to ${id}`);
       window.localStream.getTracks().forEach(track => {
         const kind = track.kind;
         const existing = senders.find(s => s.track?.kind === kind);
         if (existing) {
-          existing.replaceTrack(track);
+          existing.replaceTrack(track).catch(err => {
+            console.error(`Error replacing late ${kind} track for ${id}:`, err);
+          });
         } else {
           connections[id].addTrack(track, window.localStream);
         }
       });
-      if (connections[id].signalingState === 'stable') {
+      if (connections[id].signalingState === 'stable' && socketRef.current) {
         connections[id].createOffer()
           .then(d => connections[id].setLocalDescription(d))
           .then(() => {
@@ -641,7 +646,7 @@ const enrollFace = async () => {
     // CRITICAL: Always enable tracks at the stream level for WebRTC transmission
     // The UI toggle only controls track.enabled, not stream capture
     stream.getAudioTracks().forEach((track, idx) => {
-      track.enabled = true; // MUST be true for WebRTC transmission
+      track.enabled = audioStateRef.current;
       console.log(`🎤 Audio track ${idx}: ${track.label} - Enabled: ${track.enabled} - ReadyState: ${track.readyState}`);
     });
     
@@ -655,7 +660,7 @@ const enrollFace = async () => {
     }
     
     // Now set the UI state to match (audio and video should start as enabled)
-    setAudio(true);
+    setAudio(audioStateRef.current);
     setVideo(true);
     
     if (localVideoref.current) {
@@ -672,17 +677,22 @@ const enrollFace = async () => {
       if (id === socketIdRef.current) continue;
       
       try {
-        // For legacy browsers, try addStream
-        if (connections[id].addStream) {
-          connections[id].addStream(stream);
-        } else {
-          // Modern approach: add each track
-          stream.getTracks().forEach(track => {
+        const senders = connections[id].getSenders();
+        let addedTrack = false;
+        stream.getTracks().forEach(track => {
+          const sender = senders.find(existing => existing.track?.kind === track.kind);
+          if (sender) {
+            sender.replaceTrack(track).catch(err => {
+              console.error(`Error replacing ${track.kind} track for ${id}:`, err);
+            });
+          } else {
             connections[id].addTrack(track, stream);
-          });
-        }
+            addedTrack = true;
+          }
+        });
         
-        // Renegotiate the connection
+        // replaceTrack does not require negotiation; only new media sections do.
+        if (!addedTrack || connections[id].signalingState !== 'stable') continue;
         connections[id].createOffer().then(d => {
           connections[id].setLocalDescription(d).then(() => {
             socketRef.current.emit(
@@ -725,7 +735,7 @@ const enrollFace = async () => {
       });
       
       window.localStream = stream;
-      stream.getAudioTracks().forEach(t => { t.enabled = audio; });
+      stream.getAudioTracks().forEach(t => { t.enabled = audioStateRef.current; });
       stream.getVideoTracks().forEach(t => { t.enabled = video; });
       
       if (localVideoref.current) localVideoref.current.srcObject = stream;
@@ -738,7 +748,9 @@ const enrollFace = async () => {
           stream.getTracks().forEach(track => {
             const sender = senders.find(s => s.track?.kind === track.kind);
             if (sender) {
-              sender.replaceTrack(track);
+            sender.replaceTrack(track).catch(err => {
+              console.error(`Error replacing restored ${track.kind} track for ${id}:`, err);
+            });
             } else {
               connections[id].addTrack(track, stream);
             }
@@ -800,7 +812,9 @@ const enrollFace = async () => {
         combinedStream.getTracks().forEach(track => {
           const sender = senders.find(s => s.track?.kind === track.kind);
           if (sender) {
-            sender.replaceTrack(track);
+            sender.replaceTrack(track).catch(err => {
+              console.error(`Error replacing shared ${track.kind} track for ${id}:`, err);
+            });
             console.log(`🔄 Replaced ${track.kind} track for peer ${id}`);
           } else {
             connections[id].addTrack(track, combinedStream);
@@ -958,6 +972,7 @@ const enrollFace = async () => {
     socketRef.current.on('signal', gotMessageFromServer);
     socketRef.current.on('connect', () => {
       console.log('🔌 Socket connected! Socket ID:', socketRef.current.id);
+      setSocketConnected(true);
       console.log('🚪 Joining meeting room:', meetingCode);
       socketRef.current.emit('join-call', meetingCode, uniqueUserId, username || 'Anonymous', true);
       socketIdRef.current = socketRef.current.id;
@@ -1089,6 +1104,7 @@ const enrollFace = async () => {
       socketRef.current.on('user-left', id => {
         console.log('👋 User left:', id);
         setVideos(v => v.filter(vid => vid.socketId !== id));
+        delete remoteStreamsRef.current[id];
         setScreenSharingSockets(prev => prev.filter(sid => sid !== id));
         // Clean up peer connection
         if (connections[id]) {
@@ -1107,6 +1123,9 @@ const enrollFace = async () => {
           console.log('🗑️ Cleared pending SDP for:', id);
         }
       });
+      socketRef.current.on('disconnect', () => {
+        setSocketConnected(false);
+      });
       socketRef.current.on('user-joined', (id, clients) => {
         console.log('🎉 user-joined event received!');
         console.log('  Event ID:', id);
@@ -1117,9 +1136,6 @@ const enrollFace = async () => {
           console.log('✅ Host approved you! Joining the meeting...');
           waitingForApprovalRef.current = false;
           setIsWaitingForApproval(false);
-          if (!isRecordingRef.current) {
-            setTimeout(() => startTranscription(), 1500);
-          }
         }
         
         clients.forEach(socketListId => {
@@ -1174,9 +1190,16 @@ const enrollFace = async () => {
             console.log(`📹 Received track from peer ${socketListId}:`, e.track.kind);
             console.log(`  ⬇️ Track details: ${e.track.label} - Enabled: ${e.track.enabled} - Muted: ${e.track.muted} - ReadyState: ${e.track.readyState}`);
 
-            const remoteStream = e.streams && e.streams[0]
-              ? e.streams[0]
-              : new MediaStream([e.track]);
+            const remoteStream = remoteStreamsRef.current[socketListId] || new MediaStream();
+            const incomingTracks = e.streams && e.streams[0]
+              ? e.streams[0].getTracks()
+              : [e.track];
+            incomingTracks.forEach(track => {
+              if (!remoteStream.getTracks().some(existing => existing.id === track.id)) {
+                remoteStream.addTrack(track);
+              }
+            });
+            remoteStreamsRef.current[socketListId] = remoteStream;
 
             console.log(`🎤 Remote stream now has ${remoteStream.getAudioTracks().length} audio, ${remoteStream.getVideoTracks().length} video tracks`);
 
@@ -1196,7 +1219,7 @@ const enrollFace = async () => {
             
             // CRITICAL: Ensure audio tracks are ENABLED before adding to peer
             window.localStream.getAudioTracks().forEach(track => {
-              track.enabled = true; // Force enable for transmission
+              track.enabled = audioStateRef.current;
               console.log(`🎤 FORCE ENABLED audio track: ${track.label}`);
             });
             
@@ -1312,6 +1335,7 @@ const enrollFace = async () => {
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = transcriptLang;
+    recognitionRef.current = recognition;
 
     recognition.onaudiostart = () => console.log('🎤 Web Speech: audio started');
     recognition.onsoundstart = () => console.log('🎤 Web Speech: sound detected');
@@ -1428,11 +1452,11 @@ const enrollFace = async () => {
       console.log('🎤 Web Speech: started');
     } catch (e) {
       console.error('❌ Web Speech start failed:', e.message);
+      if (recognitionRef.current === recognition) recognitionRef.current = null;
       return false;
     }
 
     rearmWatchdog();
-    recognitionRef.current = recognition;
     return true;
   };
 
@@ -1751,6 +1775,8 @@ const enrollFace = async () => {
     }
 
     const audioTrack = audioTracks[0];
+    audioTrack.enabled = newState;
+    audioStateRef.current = newState;
 
     for (let id in connections) {
       if (id === socketIdRef.current) continue;
@@ -1837,10 +1863,21 @@ const enrollFace = async () => {
   console.log('💡 TIP: Run window.checkAudioDebug() in console to diagnose audio issues');
 
   const handleEndCall = () => {
-    console.log('📞 Ending meeting...');
-    socketRef.current?.emit('end-meeting', { meetingId: meetingCode });
-    // Don't stop tracks or redirect yet - let user see the report first
-    // They will be stopped when modal is closed
+    if (isMeetingOwner) {
+      console.log('📞 Ending meeting...');
+      socketRef.current?.emit('end-meeting', { meetingId: meetingCode });
+      return;
+    }
+
+    console.log('📞 Leaving meeting...');
+    Object.values(connections).forEach(peerConnection => peerConnection.close());
+    for (const id of Object.keys(connections)) delete connections[id];
+    window.localStream?.getTracks().forEach(track => track.stop());
+    socketRef.current?.disconnect();
+    setSocketConnected(false);
+    setVideos([]);
+    setParticipantList([]);
+    setAskForUsername(true);
   };
 
   const handleApproveJoin = (requesterSocketId) => {
@@ -3131,6 +3168,3 @@ const enrollFace = async () => {
     </div>
   );
 }
-
-
-

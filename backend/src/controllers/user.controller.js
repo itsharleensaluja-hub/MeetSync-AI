@@ -13,6 +13,7 @@ import bcrypt, { hash } from "bcrypt" // Password encryption
 
 import crypto from "crypto" // Generate random tokens
 import { Meeting } from "../models/meeting.model.js"; // Meeting database model
+import { Transcript } from "../models/transcript.model.js";
 
 // LOGIN FUNCTION
 // Validates credentials and returns a token for authenticated sessions
@@ -101,7 +102,13 @@ const getUserHistory = async (req, res) => {
         if (!user) {
             return res.status(httpStatus.UNAUTHORIZED).json({ message: "Invalid token" });
         }
-        const meetings = await Meeting.find({ user_id: user.username })
+        const meetings = await Meeting.find({
+            $or: [
+                { user_id: user.username },
+                { meetingOwner: user.username },
+                { "participants.user_id": user.username }
+            ]
+        }).sort({ endedAt: -1, date: -1 });
         res.json(meetings)
     } catch (e) {
         res.status(500).json({ message: `Something went wrong ${e}` })
@@ -111,7 +118,7 @@ const getUserHistory = async (req, res) => {
 // ADD TO HISTORY FUNCTION
 // Saves a meeting code to the user's meeting history (called when joining a call)
 const addToHistory = async (req, res) => {
-    const { token, meeting_code } = req.body;
+    const { token, meeting_code, is_host = false, name } = req.body;
 
     try {
         // Find user by token
@@ -120,20 +127,81 @@ const addToHistory = async (req, res) => {
             return res.status(httpStatus.UNAUTHORIZED).json({ message: "Invalid token" });
         }
 
-        // Create new meeting record
-        const newMeeting = new Meeting({
-            user_id: user.username,
-            meetingCode: meeting_code
-        })
+        if (!meeting_code || typeof meeting_code !== "string") {
+            return res.status(httpStatus.BAD_REQUEST).json({ message: "Meeting code is required" });
+        }
 
-        // Save to database
-        await newMeeting.save();
+        // Keep one activity record per room and merge authenticated participants.
+        let meeting = await Meeting.findOne({ meetingCode: meeting_code });
+        if (!meeting) {
+            meeting = new Meeting({
+                user_id: user.username,
+                meetingCode: meeting_code,
+                meetingOwner: is_host ? user.username : undefined,
+                title: "Weekly Strategy Sync",
+                participants: []
+            });
+        }
 
-        res.status(httpStatus.CREATED).json({ message: "Added code to history" })
+        const participants = Array.isArray(meeting.participants) ? meeting.participants : [];
+        if (!participants.some(participant => participant.user_id === user.username)) {
+            participants.push({
+                user_id: user.username,
+                name: name || user.name || user.username,
+                joinedAt: new Date()
+            });
+        }
+        meeting.participants = participants;
+        if (is_host && !meeting.meetingOwner) {
+            meeting.meetingOwner = user.username;
+        }
+        if (!meeting.user_id) {
+            meeting.user_id = user.username;
+        }
+        await meeting.save();
+
+        res.status(httpStatus.CREATED).json({ message: "Added code to history", meeting })
     } catch (e) {
         res.status(500).json({ message: `Something went wrong ${e}` })
     }
 }
 
+const getMeetingDetails = async (req, res) => {
+    const token = req.headers.authorization || req.query.token;
+    const { meetingCode } = req.params;
 
-export { login, register, getUserHistory, addToHistory }
+    try {
+        const user = await User.findOne({ token });
+        if (!user) {
+            return res.status(httpStatus.UNAUTHORIZED).json({ message: "Invalid token" });
+        }
+
+        const meeting = await Meeting.findOne({ meetingCode });
+        if (!meeting) {
+            return res.status(httpStatus.NOT_FOUND).json({ message: "Meeting not found" });
+        }
+
+        const participantUsernames = (meeting.participants || [])
+            .map(participant => participant.user_id)
+            .filter(Boolean);
+        const isAuthorized = meeting.meetingOwner === user.username ||
+            meeting.user_id === user.username ||
+            participantUsernames.includes(user.username);
+        if (!isAuthorized) {
+            return res.status(httpStatus.FORBIDDEN).json({ message: "You are not authorized to view this meeting" });
+        }
+
+        const transcript = await Transcript.findOne({ meetingId: meetingCode });
+        const summary = meeting.summary || transcript?.summary || null;
+        return res.json({
+            ...meeting,
+            summary,
+            transcript: transcript?.entries || []
+        });
+    } catch (e) {
+        return res.status(500).json({ message: `Something went wrong ${e.message}` });
+    }
+}
+
+
+export { login, register, getUserHistory, addToHistory, getMeetingDetails }

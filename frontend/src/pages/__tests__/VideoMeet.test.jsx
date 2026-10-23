@@ -26,14 +26,7 @@ const mockSocket = {
 };
 
 jest.mock('socket.io-client', () => {
-  return jest.fn(() => ({
-    on: jest.fn(),
-    emit: jest.fn(),
-    off: jest.fn(),
-    connect: jest.fn(),
-    disconnect: jest.fn(),
-    id: 'mock-socket-id',
-  }));
+  return jest.fn(() => mockSocket);
 });
 
 const mockNavigate = jest.fn();
@@ -206,6 +199,16 @@ describe('Meeting UI - Controls', () => {
     });
   });
 
+  test('participant leave disconnects only the participant', async () => {
+    renderVideoMeet();
+    await joinMeeting();
+    await waitFor(() => expect(screen.getByText('Leave')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByText('Leave'));
+
+    expect(mockSocket.emit).not.toHaveBeenCalledWith('end-meeting', expect.anything());
+  });
+
   // Screen share is conditionally rendered based on async navigator.mediaDevices.getDisplayMedia
   // availability; skipped in unit tests since it depends on browser API detection at runtime.
 });
@@ -235,6 +238,12 @@ describe('Meeting UI - Captions / Subtitles', () => {
     });
     await userEvent.click(screen.getByTitle('Show Subtitles'));
     expect(window.SpeechRecognition).toHaveBeenCalled();
+  });
+
+  test('does not start transcription automatically after joining', async () => {
+    renderVideoMeet();
+    await joinMeeting();
+    expect(window.SpeechRecognition).not.toHaveBeenCalled();
   });
 
   test('second click hides captions', async () => {

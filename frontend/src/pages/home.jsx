@@ -55,14 +55,14 @@ function HomeComponent() {
     };
 
     const handleStartMeeting = async () => {
-        await addToUserHistory(createdCode);
+        await addToUserHistory(createdCode, true);
         navigate(`/${createdCode}`);
     };
 
     let handleJoinVideoCall = async () => {
         const code = extractCode(joinInput);
         if (!code) return;
-        await addToUserHistory(code);
+        await addToUserHistory(code, false);
         navigate(`/${code}`);
     };
 

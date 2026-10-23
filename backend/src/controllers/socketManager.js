@@ -13,6 +13,7 @@ import { Attendance } from "../models/attendance.model.js";
 import ActionItem from "../models/actionItem.model.js";
 import { Transcript } from "../models/transcript.model.js";
 import { ThreadMemory } from "../models/threadMemory.model.js";
+import { Meeting } from "../models/meeting.model.js";
 
 import { Server } from "socket.io";
 import OpenAI from "openai";
@@ -208,9 +209,59 @@ async function saveActionItems(meetingId, summary) {
                 await ActionItem.insertMany(docs);
                 console.log(`âœ… Saved ${docs.length} action items for meeting ${meetingId}`);
             }
+
         } catch (err) {
             console.error('Failed to save action items:', err.message);
         }
+    }
+}
+
+async function saveMeetingSummary(meetingId, summary, entries, room = connections[meetingId] || []) {
+    if (!summary) return;
+
+    try {
+        let meeting = await Meeting.findOne({ meetingCode: meetingId });
+        if (!meeting) {
+            meeting = new Meeting({
+                meetingCode: meetingId,
+                meetingOwner: meetingOwners[meetingId],
+                title: "Weekly Strategy Sync",
+                participants: []
+            });
+        }
+
+        const participants = Array.isArray(meeting.participants) ? meeting.participants : [];
+        (room || []).forEach(participant => {
+            const userId = participant.userId || participant.userName;
+            if (!userId || participants.some(existing => existing.user_id === userId)) return;
+            participants.push({
+                user_id: userId,
+                name: participant.userName || userId,
+                joinedAt: new Date()
+            });
+        });
+
+        meeting.participants = participants;
+        meeting.summary = summary;
+        meeting.summaryPreview = summary.executiveSummary || "";
+        meeting.endedAt = new Date();
+        await meeting.save();
+
+        const existingTranscript = await Transcript.findOne({ meetingId });
+        if (existingTranscript) {
+            existingTranscript.entries = entries || existingTranscript.entries || [];
+            existingTranscript.summary = summary;
+            await existingTranscript.save();
+        } else {
+            await new Transcript({
+                meetingId,
+                entries: entries || [],
+                summary
+            }).save();
+        }
+        console.log(`💾 Meeting summary saved for ${meetingId}`);
+    } catch (err) {
+        console.error(`Failed to save meeting summary for ${meetingId}:`, err.message);
     }
 }
 
@@ -617,6 +668,12 @@ export const connectToSocket = (server) => {
                 console.log(`âš ï¸ No meeting owner found for: ${meetingId}`);
             }
 
+            const requester = room.find(user => user.socketId === socket.id);
+            if (!requester || requester.userId !== owner) {
+                console.warn(`âš ï¸ Ignoring end-meeting request from non-owner socket: ${socket.id}`);
+                return;
+            }
+
             console.log(`ðŸ“‹ Room has ${room.length} participants:`, room.map(u => ({ userId: u.userId, userName: u.userName, totalTime: u.totalTime, verifiedTime: u.verifiedTime })));
 
             const ownerUser = room.find(u => u.userId === owner);
@@ -722,17 +779,8 @@ except executiveSummary which is a string.`
                     console.log(`📋 Auto-summary emitted for ${meetingId}`);
                     await saveActionItems(meetingId, summary);
 
-                    // ── PERSIST TRANSCRIPT TO MONGODB ──────────────────
-                    try {
-                        await Transcript.findOneAndUpdate(
-                            { meetingId },
-                            { meetingId, entries: meetingTranscript, summary },
-                            { upsert: true, new: true }
-                        );
-                        console.log(`💾 Transcript saved to DB for ${meetingId}`);
-                    } catch (dbErr) {
-                        console.error("Failed to save transcript to DB:", dbErr.message);
-                    }
+                    // ── PERSIST FINAL MEETING SUMMARY AND TRANSCRIPT ───
+                    await saveMeetingSummary(meetingId, summary, meetingTranscript, room);
 
                     // ── SAVE THREAD MEMORY ─────────────────────────────
                     const roomParticipants = room.map(u => ({
@@ -910,6 +958,7 @@ Requirements:
                     io.to(meetingId).emit("summary-generated", summary);
                     console.log(`📋 GPT summary generated for ${meetingId}: ${summary.executiveSummary?.substring(0, 80)}...`);
                     await saveActionItems(meetingId, summary);
+                    await saveMeetingSummary(meetingId, summary, mergedEntries);
                     return;
                 } catch (err) {
                     console.error('GPT summary error, falling back to keyword extraction:', err.message);
@@ -920,6 +969,7 @@ Requirements:
             io.to(meetingId).emit("summary-generated", summary);
             console.log(`📋 Keyword summary generated for ${meetingId}: ${summary.executiveSummary?.substring(0, 80)}...`);
             await saveActionItems(meetingId, summary);
+            await saveMeetingSummary(meetingId, summary, mergedEntries);
         });
 
         // Fetch action items for a meeting
@@ -1138,4 +1188,3 @@ Requirements:
 
     return io;
 }
-

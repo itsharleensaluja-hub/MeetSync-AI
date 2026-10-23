@@ -1,4 +1,4 @@
-import { setupTestApp, teardownTestApp, MockUser, MockMeeting } from './setup.js';
+import { setupTestApp, teardownTestApp, MockUser, MockMeeting, MockTranscript } from './setup.js';
 import request from 'supertest';
 
 let app;
@@ -135,5 +135,52 @@ describe('POST /api/v1/users/add_to_activity', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.message).toBe('Added code to history');
+  });
+
+  it('upserts one meeting and restricts saved summary access to participants', async () => {
+    const suffix = Date.now().toString();
+    const owner = { name: 'Owner', username: `owner-${suffix}`, password: 'password123' };
+    const participant = { name: 'Participant', username: `participant-${suffix}`, password: 'password123' };
+    const outsider = { name: 'Outsider', username: `outsider-${suffix}`, password: 'password123' };
+    const meetingCode = `meeting-${suffix}`;
+
+    for (const user of [owner, participant, outsider]) {
+      await request(app).post('/api/v1/users/register').send(user);
+    }
+    const login = async (username) => (await request(app)
+      .post('/api/v1/users/login')
+      .send({ username, password: 'password123' })).body.token;
+    const ownerToken = await login(owner.username);
+    const participantToken = await login(participant.username);
+    const outsiderToken = await login(outsider.username);
+
+    await request(app).post('/api/v1/users/add_to_activity')
+      .send({ token: ownerToken, meeting_code: meetingCode, is_host: true });
+    await request(app).post('/api/v1/users/add_to_activity')
+      .send({ token: participantToken, meeting_code: meetingCode });
+    await request(app).post('/api/v1/users/add_to_activity')
+      .send({ token: participantToken, meeting_code: meetingCode });
+
+    const meeting = MockMeeting.store.items.find(item => item.meetingCode === meetingCode);
+    meeting.summary = { executiveSummary: 'Saved summary', keyDiscussionPoints: [] };
+    await new MockTranscript({
+      meetingId: meetingCode,
+      entries: [{ text: 'Discussion', speaker: 'Owner', timestamp: Date.now() }],
+      summary: meeting.summary
+    }).save();
+
+    expect(MockMeeting.store.items.filter(item => item.meetingCode === meetingCode)).toHaveLength(1);
+    expect(meeting.participants).toHaveLength(2);
+
+    const authorized = await request(app)
+      .get(`/api/v1/users/meeting/${meetingCode}`)
+      .set('Authorization', participantToken);
+    expect(authorized.status).toBe(200);
+    expect(authorized.body.summary.executiveSummary).toBe('Saved summary');
+
+    const denied = await request(app)
+      .get(`/api/v1/users/meeting/${meetingCode}`)
+      .set('Authorization', outsiderToken);
+    expect(denied.status).toBe(403);
   });
 });

@@ -5,7 +5,7 @@
  */
 
 import { Router } from "express";
-import { addToHistory, getUserHistory, login, register } from "../controllers/user.controller.js";
+import { addToHistory, getMeetingDetails, getUserHistory, login, register } from "../controllers/user.controller.js";
 
 const router = Router();
 
@@ -21,5 +21,8 @@ router.route("/add_to_activity").post(addToHistory)
 
 // GET /api/v1/users/get_all_activity - Get user's meeting history
 router.route("/get_all_activity").get(getUserHistory)
+
+// GET /api/v1/users/meeting/:meetingCode - Get an authorized meeting summary
+router.route("/meeting/:meetingCode").get(getMeetingDetails)
 
 export default router;

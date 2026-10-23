@@ -101,13 +101,30 @@ export const AuthProvider = ({ children }) => {
         }
     }
 
+    const getMeetingDetails = async (meetingCode) => {
+        try {
+            const request = await client.get(`/meeting/${encodeURIComponent(meetingCode)}`, {
+                headers: {
+                    Authorization: localStorage.getItem("token")
+                }
+            });
+            return request.data;
+        } catch (err) {
+            throw err;
+        }
+    }
+
     // ADD TO HISTORY FUNCTION
     // Saves a meeting code to the user's history when they join a call
-    const addToUserHistory = async (meetingCode) => {
+    const addToUserHistory = async (meetingCode, isHost = false) => {
         try {
-            let request = await client.post("/add_to_activity", {
+            const payload = {
                 token: localStorage.getItem("token"),
                 meeting_code: meetingCode
+            };
+            if (isHost) payload.is_host = true;
+            let request = await client.post("/add_to_activity", {
+                ...payload
             });
             return request
         } catch (e) {
@@ -119,7 +136,7 @@ export const AuthProvider = ({ children }) => {
     // Package all authentication functions and data
     // These will be available via useContext(AuthContext) in any component
     const data = {
-        userData, setUserData, addToUserHistory, getHistoryOfUser, handleRegister, handleLogin
+        userData, setUserData, addToUserHistory, getHistoryOfUser, getMeetingDetails, handleRegister, handleLogin
     }
 
     // Provide authentication context to all child components
