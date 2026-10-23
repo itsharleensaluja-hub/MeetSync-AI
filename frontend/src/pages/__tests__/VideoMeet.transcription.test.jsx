@@ -228,6 +228,15 @@ describe('startWebSpeech() - onresult', () => {
 
 // --- C. Web Speech --- onerror ---
 describe('startWebSpeech() - onerror', () => {
+  test('falls back to local transcription when browser recognition is unavailable', async () => {
+    renderVideoMeet();
+    await enableCaptions();
+    fireRecognitionError('service-not-allowed');
+    await waitFor(() => {
+      expect(window.MediaRecorder).toHaveBeenCalled();
+    });
+  });
+
   test('no-speech error is ignored', async () => {
     renderVideoMeet();
     await enableCaptions();

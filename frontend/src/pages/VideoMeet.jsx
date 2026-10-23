@@ -105,6 +105,7 @@ export default function VideoMeetComponent() {
   const [audioAvailable, setAudioAvailable] = useState(true);
   const [video, setVideo] = useState(true);
   const [audio, setAudio] = useState(true);
+  const [localStream, setLocalStream] = useState(null);
   const audioStateRef = useRef(true);
   const [screen, setScreen] = useState(false);
   const [screenAvailable, setScreenAvailable] = useState(false);
@@ -465,11 +466,17 @@ const enrollFace = async () => {
   // Attach local stream to the in-call video element when the meeting UI renders
   // (fires for both direct join and waiting-room approval)
   useEffect(() => {
-    if (!askForUsername && !isWaitingForApproval && localVideoref.current && window.localStream) {
-      localVideoref.current.srcObject = window.localStream;
-      setTimeout(() => { localVideoref.current?.play().catch(() => {}); }, 50);
+    if (!askForUsername && !isWaitingForApproval && localVideoref.current && localStream) {
+      localVideoref.current.srcObject = localStream;
+      setTimeout(() => {
+        const videoElement = localVideoref.current;
+        if (!videoElement) return;
+        videoElement.play().catch(() => {
+          setTimeout(() => videoElement.play().catch(() => {}), 250);
+        });
+      }, 50);
     }
-  }, [askForUsername, isWaitingForApproval]);
+  }, [askForUsername, isWaitingForApproval, localStream]);
 
   // === CORE WEBRTC & MEDIA FUNCTIONS ===
   const getPermissions = async () => {
@@ -487,6 +494,7 @@ const enrollFace = async () => {
         }
       });
       window.localStream = stream;
+      setLocalStream(stream);
       
       // Enable audio and video tracks by default
       const audioTracks = stream.getAudioTracks();
@@ -526,6 +534,7 @@ const enrollFace = async () => {
           video: true,
         });
         window.localStream = videoStream;
+        setLocalStream(videoStream);
         videoStream.getVideoTracks().forEach(track => track.enabled = true);
         if (localVideoref.current) localVideoref.current.srcObject = videoStream;
         if (lobbyVideoRef.current) lobbyVideoRef.current.srcObject = videoStream;
@@ -1385,6 +1394,16 @@ const enrollFace = async () => {
         return;
       }
 
+      const switchToLocalTranscription = () => {
+        recognition.onend = null;
+        recognition.onresult = null;
+        recognition.onerror = null;
+        try { recognition.stop(); } catch (e) {}
+        if (recognitionRef.current === recognition) recognitionRef.current = null;
+        webSpeechTriedRef.current = true;
+        startTransformers();
+      };
+
       if (event.error === 'network') {
         networkErrorCountRef.current++;
         console.log(`🔁 Web Speech network error (${networkErrorCountRef.current}/3)`);
@@ -1392,15 +1411,15 @@ const enrollFace = async () => {
 
         if (networkErrorCountRef.current >= 3) {
           console.log('🔄 Web Speech failed, switching to Transformers.js...');
-          recognition.onend = null;
-          recognition.onresult = null;
-          recognition.onerror = null;
-          try { recognition.stop(); } catch (e) {}
-          if (recognitionRef.current === recognition) recognitionRef.current = null;
-          webSpeechTriedRef.current = true;
-          startTransformers();
+          switchToLocalTranscription();
           return;
         }
+        return;
+      }
+
+      if (event.error === 'service-not-allowed') {
+        console.warn(`⚠️ Web Speech ${event.error}; switching to local transcription`);
+        switchToLocalTranscription();
         return;
       }
 
@@ -2252,13 +2271,13 @@ const enrollFace = async () => {
               <div className={`${styles.videoTile} ${isMeetingOwner ? styles.speakerGlow : ''} ${screen ? styles.screenShareTile : ''}`}>
                 <video ref={el => {
                   localVideoref.current = el;
-                  if (el && window.localStream) {
-                    el.srcObject = window.localStream;
+                  if (el && localStream) {
+                    el.srcObject = localStream;
                     setTimeout(() => { el.play().catch(() => {}); }, 50);
                   }
                 }} autoPlay muted playsInline className={`${styles.videoElement} ${screen ? styles.screenShareVideo : ''}`}
-                  style={{ display: (video && videoAvailable && window.localStream) ? 'block' : 'none' }} />
-                {(!video || !videoAvailable || !window.localStream) && (
+                  style={{ display: (video && videoAvailable && localStream) ? 'block' : 'none' }} />
+                {(!video || !videoAvailable || !localStream) && (
                   <div className={styles.avatarPlaceholder}>
                     <span>{(username || 'You')[0].toUpperCase()}</span>
                   </div>

@@ -177,6 +177,29 @@ describe('Transcription', () => {
     await disconnect(first);
     await disconnect(second);
   }, 20000);
+
+  test('relays transcript entries from multiple participants to the room', async () => {
+    const room = roomId();
+    const { owner, joiner } = await setupTwoUsers(room);
+    const ownerEntries = [];
+    const joinerEntries = [];
+    owner.on('transcript-entry', entry => ownerEntries.push(entry));
+    joiner.on('transcript-entry', entry => joinerEntries.push(entry));
+
+    owner.emit('transcript-entry', {
+      meetingId: room, text: 'Owner transcript', speaker: 'Owner', lang: 'en', timestamp: Date.now()
+    });
+    joiner.emit('transcript-entry', {
+      meetingId: room, text: 'Joiner transcript', speaker: 'Joiner', lang: 'en', timestamp: Date.now()
+    });
+    await new Promise(r => setTimeout(r, 300));
+
+    expect(ownerEntries.some(entry => entry.text === 'Joiner transcript')).toBe(true);
+    expect(joinerEntries.some(entry => entry.text === 'Owner transcript')).toBe(true);
+
+    await disconnect(owner);
+    await disconnect(joiner);
+  }, 20000);
 });
 
 describe('Polls', () => {
